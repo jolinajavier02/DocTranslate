@@ -11,36 +11,28 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.j
  * @returns {Promise<string>} - Extracted text
  */
 export const extractTextFromFile = async (file) => {
-  console.log('extractTextFromFile called with:', file)
-  
   if (!file) {
     throw new Error('No file provided')
   }
 
-  console.log('Validating file...')
   validateFile(file)
 
   const fileName = file.name.toLowerCase()
-  console.log('File name:', fileName, 'File type:', file.type)
   
   try {
     if (file.type === 'application/pdf' || fileName.endsWith('.pdf')) {
-      console.log('Processing PDF file...')
       return await extractTextFromPDF(file)
     } else if (
       file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
       fileName.endsWith('.docx')
     ) {
-      console.log('Processing DOCX file...')
       return await extractTextFromDOCX(file)
     } else if (file.type.startsWith('image/')) {
-      console.log('Processing image file...')
       return await extractTextFromImage(file)
     } else {
       throw new Error('Unsupported file type. Please upload PDF, DOCX, JPG, or PNG files.')
     }
   } catch (error) {
-    console.error('Text extraction error:', error)
     throw new Error(`Failed to extract text: ${error.message}`)
   }
 }
@@ -83,13 +75,8 @@ const extractTextFromPDF = async (file) => {
  */
 const extractTextFromDOCX = async (file) => {
   try {
-    console.log('Reading DOCX file as array buffer...')
     const arrayBuffer = await file.arrayBuffer()
-    console.log('Array buffer size:', arrayBuffer.byteLength)
-    
-    console.log('Extracting text with mammoth...')
     const result = await mammoth.extractRawText({ arrayBuffer })
-    console.log('Mammoth result:', result)
     
     if (!result.value.trim()) {
       throw new Error('No text found in DOCX file.')
