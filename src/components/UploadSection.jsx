@@ -43,40 +43,44 @@ const UploadSection = ({ onTranslationComplete }) => {
   })
 
   const handleTranslate = async () => {
-    console.log('Translate button clicked!')
-    console.log('Uploaded file:', uploadedFile)
-    console.log('Selected language:', selectedLanguage)
+    alert('Translate button clicked!')
+    console.log('🔄 Translate button clicked!')
     
     if (!uploadedFile) {
+      console.log('❌ No file uploaded')
       setError('Please upload a file first')
       return
     }
 
+    if (!selectedLanguage) {
+      console.log('❌ No target language selected')
+      setError('Please select a target language')
+      return
+    }
+
+    console.log('✅ Starting translation process...')
     setLoading(true)
     setError(null)
 
     try {
-      console.log('Starting text extraction...')
-      // Extract text from file
+      console.log('📄 Extracting text from file...')
       const extractedText = await extractTextFromFile(uploadedFile)
-      console.log('Extracted text:', extractedText)
+      console.log('✅ Text extracted:', extractedText.substring(0, 100) + '...')
+      
       setOriginalText(extractedText)
 
-      console.log('Starting translation...')
-      // Translate text
-      const translated = await translateText(extractedText, selectedLanguage)
-      console.log('Translated text:', translated)
-      setTranslatedText(translated)
-
-      // Add to history
+      console.log('🌐 Translating text...')
+      const translatedText = await translateText(extractedText, selectedLanguage)
+      console.log('✅ Translation completed:', translatedText.substring(0, 100) + '...')
+      
+      setTranslatedText(translatedText)
       addToHistory()
 
-      console.log('Navigating to preview...')
-      // Navigate to preview
+      console.log('🎯 Navigating to preview...')
       onTranslationComplete()
     } catch (error) {
-      console.error('Translation error:', error)
-      setError(error.message || 'Translation failed. Please try again.')
+      console.error('❌ Translation error:', error)
+      setError(`Translation failed: ${error.message}`)
     } finally {
       setLoading(false)
     }
