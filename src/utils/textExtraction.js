@@ -1,6 +1,6 @@
 import { createWorker } from 'tesseract.js'
 import * as pdfjsLib from 'pdfjs-dist'
-import mammoth from 'mammoth'
+import * as mammoth from 'mammoth'
 
 // Configure PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
@@ -82,14 +82,24 @@ const extractTextFromPDF = async (file) => {
  * @returns {Promise<string>} - Extracted text
  */
 const extractTextFromDOCX = async (file) => {
-  const arrayBuffer = await file.arrayBuffer()
-  const result = await mammoth.extractRawText({ arrayBuffer })
-  
-  if (!result.value.trim()) {
-    throw new Error('No text found in DOCX file.')
+  try {
+    console.log('Reading DOCX file as array buffer...')
+    const arrayBuffer = await file.arrayBuffer()
+    console.log('Array buffer size:', arrayBuffer.byteLength)
+    
+    console.log('Extracting text with mammoth...')
+    const result = await mammoth.extractRawText({ arrayBuffer })
+    console.log('Mammoth result:', result)
+    
+    if (!result.value.trim()) {
+      throw new Error('No text found in DOCX file.')
+    }
+    
+    return result.value.trim()
+  } catch (error) {
+    console.error('DOCX extraction error:', error)
+    throw new Error(`Failed to extract text from DOCX: ${error.message}`)
   }
-  
-  return result.value.trim()
 }
 
 /**
