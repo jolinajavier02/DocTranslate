@@ -3,7 +3,7 @@ import * as pdfjsLib from 'pdfjs-dist'
 import * as mammoth from 'mammoth'
 
 // Configure PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`
 
 /**
  * Extract text from various file types
