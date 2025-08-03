@@ -18,7 +18,9 @@
     "jspdf": "^2.5.1",
     "html2canvas": "^1.4.1",
     "react-dropzone": "^14.2.3",
-    "lucide-react": "^0.294.0"
+    "lucide-react": "^0.294.0",
+    "pdfjs-dist": "^4.8.69",
+    "mammoth": "^1.8.0"
   },
   "devDependencies": {
     "@types/react": "^18.2.37",
