@@ -47,6 +47,42 @@ const mockTranslations = {
 }
 
 /**
+ * LibreTranslate API integration
+ * @param {string} text - Text to translate
+ * @param {string} targetLanguage - Target language code
+ * @param {string} sourceLanguage - Source language code
+ * @returns {Promise<string>} - Translated text
+ */
+const translateWithLibreTranslate = async (text, targetLanguage, sourceLanguage = 'auto') => {
+  const url = 'https://libretranslate.com/translate'
+  
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      q: text,
+      source: sourceLanguage,
+      target: targetLanguage,
+      format: 'text'
+    })
+  })
+
+  if (!response.ok) {
+    throw new Error(`LibreTranslate API error: ${response.status} ${response.statusText}`)
+  }
+
+  const data = await response.json()
+  
+  if (!data.translatedText) {
+    throw new Error('Invalid response from LibreTranslate API')
+  }
+
+  return data.translatedText
+}
+
+/**
  * Main translation function
  * @param {string} text - Text to translate
  * @param {string} targetLanguage - Target language code
@@ -63,18 +99,25 @@ export const translateText = async (text, targetLanguage, sourceLanguage = 'auto
   }
 
   try {
-    // Check if API keys are available
-    const googleApiKey = import.meta.env.VITE_GOOGLE_TRANSLATE_API_KEY
-    const deepLApiKey = import.meta.env.VITE_DEEPL_API_KEY
+    // Try LibreTranslate first (free, no API key required)
+    try {
+      return await translateWithLibreTranslate(text, targetLanguage, sourceLanguage)
+    } catch (libreError) {
+      console.warn('LibreTranslate failed, trying fallback options:', libreError.message)
+      
+      // Check if API keys are available for fallback
+      const googleApiKey = import.meta.env.VITE_GOOGLE_TRANSLATE_API_KEY
+      const deepLApiKey = import.meta.env.VITE_DEEPL_API_KEY
 
-    if (googleApiKey) {
-      return await translateWithGoogle(text, targetLanguage, sourceLanguage)
-    } else if (deepLApiKey) {
-      return await translateWithDeepL(text, targetLanguage, sourceLanguage)
-    } else {
-      // Fallback to mock translation for demo
-      console.warn('No API keys found. Using mock translation for demo purposes.')
-      return await mockTranslate(text, targetLanguage)
+      if (googleApiKey) {
+        return await translateWithGoogle(text, targetLanguage, sourceLanguage)
+      } else if (deepLApiKey) {
+        return await translateWithDeepL(text, targetLanguage, sourceLanguage)
+      } else {
+        // Final fallback to mock translation for demo
+        console.warn('No API keys found. Using mock translation for demo purposes.')
+        return await mockTranslate(text, targetLanguage)
+      }
     }
   } catch (error) {
     console.error('Translation error:', error)
