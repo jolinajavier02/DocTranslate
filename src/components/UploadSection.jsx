@@ -43,6 +43,10 @@ const UploadSection = ({ onTranslationComplete }) => {
   })
 
   const handleTranslate = async () => {
+    console.log('Translate button clicked!')
+    console.log('Uploaded file:', uploadedFile)
+    console.log('Selected language:', selectedLanguage)
+    
     if (!uploadedFile) {
       setError('Please upload a file first')
       return
@@ -52,20 +56,26 @@ const UploadSection = ({ onTranslationComplete }) => {
     setError(null)
 
     try {
+      console.log('Starting text extraction...')
       // Extract text from file
       const extractedText = await extractTextFromFile(uploadedFile)
+      console.log('Extracted text:', extractedText)
       setOriginalText(extractedText)
 
+      console.log('Starting translation...')
       // Translate text
       const translated = await translateText(extractedText, selectedLanguage)
+      console.log('Translated text:', translated)
       setTranslatedText(translated)
 
       // Add to history
       addToHistory()
 
+      console.log('Navigating to preview...')
       // Navigate to preview
       onTranslationComplete()
     } catch (error) {
+      console.error('Translation error:', error)
       setError(error.message || 'Translation failed. Please try again.')
     } finally {
       setLoading(false)
