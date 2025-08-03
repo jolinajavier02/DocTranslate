@@ -1,0 +1,15 @@
+<svg width="400" height="200" xmlns="http://www.w3.org/2000/svg">
+  <rect width="400" height="200" fill="white" stroke="black" stroke-width="2"/>
+  <text x="200" y="50" text-anchor="middle" font-family="Arial" font-size="24" fill="black">
+    Test Document
+  </text>
+  <text x="200" y="90" text-anchor="middle" font-family="Arial" font-size="16" fill="black">
+    Hello world! This is a test document for translation.
+  </text>
+  <text x="200" y="120" text-anchor="middle" font-family="Arial" font-size="16" fill="black">
+    This document contains text to test the translation functionality.
+  </text>
+  <text x="200" y="150" text-anchor="middle" font-family="Arial" font-size="16" fill="black">
+    The translate button should process this text.
+  </text>
+</svg>
