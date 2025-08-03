@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
-import { Upload, FileText, Image, File, Loader2 } from 'lucide-react'
+import { Upload, FileText, Image, File, Loader2, Languages } from 'lucide-react'
 import { useTranslation } from '../context/TranslationContext'
 import { extractTextFromFile } from '../utils/textExtraction'
 import { translateText } from '../utils/translation'
