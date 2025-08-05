@@ -1,79 +1,61 @@
-const form = document.getElementById('upload-form');
-const originalText = document.getElementById('original-text');
-const translatedText = document.getElementById('translated-text');
-const downloadBtn = document.getElementById('download-btn');
-const libreAPI = 'https://libretranslate.de/translate';
+const fileInput = document.getElementById('fileInput');
+const translateBtn = document.getElementById('translateBtn');
+const originalTextEl = document.getElementById('originalText');
+const translatedTextEl = document.getElementById('translatedText');
+const languageSelect = document.getElementById('languageSelect');
 
-form.addEventListener('submit', async (e) => {
-  e.preventDefault();
+async function translateText(text, targetLang) {
+  const res = await fetch('https://libretranslate.de/translate', {
+    method: 'POST',
+    body: JSON.stringify({ q: text, source: 'auto', target: targetLang, format: 'text' }),
+    headers: { 'Content-Type': 'application/json' }
+  });
+  const data = await res.json();
+  return data.translatedText;
+}
 
-  const file = document.getElementById('doc-upload').files[0];
-  const targetLang = document.getElementById('lang-select').value;
-
-  if (!file) {
-    alert('Please upload a file.');
-    return;
+async function extractTextFromPDF(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let text = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    text += content.items.map(item => item.str).join(' ') + '\n';
   }
+  return text;
+}
 
-  let textContent = '';
+function extractTextFromImage(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      Tesseract.recognize(reader.result, 'eng', {
+        logger: m => console.log(m)
+      }).then(({ data: { text } }) => resolve(text));
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
-  if (file.type === 'application/pdf') {
-    // Extract text from PDF
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+translateBtn.addEventListener('click', async () => {
+  const file = fileInput.files[0];
+  if (!file) return alert('Please upload a document.');
 
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const textContentObj = await page.getTextContent();
-      const pageText = textContentObj.items.map(item => item.str).join(' ');
-      textContent += pageText + '\n\n';
-    }
-  } else if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
-    // Read text file
-    textContent = await file.text();
+  let extractedText = '';
+  const fileType = file.type;
+
+  if (fileType === 'application/pdf') {
+    extractedText = await extractTextFromPDF(file);
+  } else if (fileType.startsWith('image/')) {
+    extractedText = await extractTextFromImage(file);
+  } else if (fileType === 'text/plain') {
+    extractedText = await file.text();
   } else {
-    alert('Unsupported file type. Please upload a PDF or TXT file.');
-    return;
+    return alert('Unsupported file type.');
   }
 
-  originalText.textContent = textContent;
-  translatedText.textContent = 'Translating...';
-
-  // Call LibreTranslate API
-  try {
-    const response = await fetch(libreAPI, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        q: textContent,
-        source: 'auto',
-        target: targetLang,
-        format: 'text'
-      }),
-    });
-
-    const data = await response.json();
-    translatedText.textContent = data.translatedText || 'No translation available.';
-  } catch (error) {
-    translatedText.textContent = 'Translation failed. Please try again later.';
-    console.error(error);
-  }
-});
-
-// Download translated text as .txt file
-downloadBtn.addEventListener('click', () => {
-  if (!translatedText.textContent.trim()) {
-    alert('No translated text available to download.');
-    return;
-  }
-
-  const blob = new Blob([translatedText.textContent], { type: 'text/plain' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'translated.txt';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  originalTextEl.textContent = extractedText;
+  const translated = await translateText(extractedText, languageSelect.value);
+  translatedTextEl.textContent = translated;
 });
