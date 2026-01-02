@@ -289,31 +289,24 @@ async function renderVisualTranslation(ocrResult, imageSource) {
                 }
 
                 // Batch translation for speed
-                // Join blocks with a unique delimiter that won't be translated
-                const delimiter = " ||| ";
+                const delimiter = " | "; // Simpler delimiter
                 const allTexts = blocks.map(b => b.text.trim());
-
-                // MyMemory limit is ~500-1000 chars. We'll chunk the blocks.
-                let currentChunk = [];
-                let currentLength = 0;
                 let translatedTexts = [];
 
-                for (const text of allTexts) {
-                    if (currentLength + text.length + delimiter.length > 500) {
-                        const batch = currentChunk.join(delimiter);
-                        const translatedBatch = await translateText(batch, sourceLanguage.value, targetLanguage.value);
-                        translatedTexts.push(...translatedBatch.split(delimiter));
-                        currentChunk = [text];
-                        currentLength = text.length;
-                    } else {
-                        currentChunk.push(text);
-                        currentLength += text.length + delimiter.length;
-                    }
-                }
-                if (currentChunk.length > 0) {
-                    const batch = currentChunk.join(delimiter);
+                // Process in smaller batches to avoid API limits and ensure delimiter integrity
+                for (let i = 0; i < allTexts.length; i += 5) {
+                    const batch = allTexts.slice(i, i + 5).join(delimiter);
                     const translatedBatch = await translateText(batch, sourceLanguage.value, targetLanguage.value);
-                    translatedTexts.push(...translatedBatch.split(delimiter));
+                    const parts = translatedBatch.split(delimiter);
+
+                    // Ensure we have the same number of parts back, fallback to individual if mismatch
+                    if (parts.length === Math.min(5, allTexts.length - i)) {
+                        translatedTexts.push(...parts);
+                    } else {
+                        for (let j = i; j < Math.min(i + 5, allTexts.length); j++) {
+                            translatedTexts.push(await translateText(allTexts[j], sourceLanguage.value, targetLanguage.value));
+                        }
+                    }
                 }
 
                 const sampleCanvas = document.createElement('canvas');
@@ -327,28 +320,33 @@ async function renderVisualTranslation(ocrResult, imageSource) {
                     const { x0, y0, x1, y1 } = block.bbox;
                     const width = x1 - x0;
                     const height = y1 - y0;
-                    const translatedText = translatedTexts[i] || blocks[i].text;
+                    const translatedText = (translatedTexts[i] || blocks[i].text).trim();
 
                     // Sample background color (average of 4 corners)
                     const p1 = sampleCtx.getImageData(Math.max(0, x0), Math.max(0, y0), 1, 1).data;
-                    const p2 = sampleCtx.getImageData(Math.min(img.width - 1, x1), Math.max(0, y0), 1, 1).data;
+                    const p2 = sampleCtx.getImageData(Math.min(img.width - 1, x1 - 1), Math.max(0, y0), 1, 1).data;
                     const bgColor = `rgb(${Math.round((p1[0] + p2[0]) / 2)}, ${Math.round((p1[1] + p2[1]) / 2)}, ${Math.round((p1[2] + p2[2]) / 2)})`;
 
                     // Clean and Draw
                     ctx.fillStyle = bgColor;
                     ctx.fillRect(x0 - 1, y0 - 1, width + 2, height + 2);
 
-                    ctx.fillStyle = (p1[0] + p1[1] + p1[2]) / 3 > 128 ? '#000000' : '#ffffff';
-                    let fontSize = Math.max(8, height * 0.8);
+                    // Determine text color based on background brightness
+                    const brightness = (p1[0] * 299 + p1[1] * 587 + p1[2] * 114) / 1000;
+                    ctx.fillStyle = brightness > 128 ? '#000000' : '#ffffff';
+
+                    let fontSize = Math.max(8, height * 0.85);
                     ctx.font = `${fontSize}px "Outfit", sans-serif`;
 
+                    // Fit text to width
                     while (ctx.measureText(translatedText).width > width && fontSize > 6) {
-                        fontSize -= 1;
+                        fontSize -= 0.5;
                         ctx.font = `${fontSize}px "Outfit", sans-serif`;
                     }
 
-                    ctx.textBaseline = 'top';
-                    ctx.fillText(translatedText, x0, y0 + (height - fontSize) / 2);
+                    ctx.textBaseline = 'middle';
+                    ctx.textAlign = 'left';
+                    ctx.fillText(translatedText, x0, y0 + height / 2);
                 }
                 resolve();
             } catch (err) {
