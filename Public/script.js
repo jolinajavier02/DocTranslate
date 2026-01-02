@@ -37,6 +37,7 @@ modeBtns.forEach(btn => {
         btn.classList.add('active');
         currentMode = btn.dataset.mode;
         updateUIForMode();
+        lucide.createIcons();
     });
 });
 
