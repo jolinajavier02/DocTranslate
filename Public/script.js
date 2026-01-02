@@ -261,12 +261,19 @@ async function performOCR(fileOrBlob) {
 async function renderVisualTranslation(ocrResult) {
     const canvas = resultCanvas;
     const ctx = canvas.getContext('2d');
+    const origCtx = originalCanvas.getContext('2d');
     const img = new Image();
 
     return new Promise((resolve) => {
         img.onload = async () => {
+            // Set both canvases to the same dimensions
             canvas.width = img.width;
             canvas.height = img.height;
+            originalCanvas.width = img.width;
+            originalCanvas.height = img.height;
+
+            // Draw original on both initially
+            origCtx.drawImage(img, 0, 0);
             ctx.drawImage(img, 0, 0);
 
             const blocks = ocrResult.data.blocks;
@@ -340,9 +347,30 @@ async function pdfPageToImage(file) {
 }
 
 downloadVisualBtn.addEventListener('click', () => {
+    // Create a combined canvas for side-by-side download
+    const combinedCanvas = document.createElement('canvas');
+    const combinedCtx = combinedCanvas.getContext('2d');
+
+    combinedCanvas.width = originalCanvas.width + resultCanvas.width + 20; // 20px gap
+    combinedCanvas.height = Math.max(originalCanvas.height, resultCanvas.height) + 60; // Extra space for labels
+
+    // Fill background
+    combinedCtx.fillStyle = '#ffffff';
+    combinedCtx.fillRect(0, 0, combinedCanvas.width, combinedCanvas.height);
+
+    // Draw labels
+    combinedCtx.fillStyle = '#000000';
+    combinedCtx.font = 'bold 24px sans-serif';
+    combinedCtx.fillText('Original', 10, 30);
+    combinedCtx.fillText('Translated', originalCanvas.width + 30, 30);
+
+    // Draw canvases
+    combinedCtx.drawImage(originalCanvas, 10, 50);
+    combinedCtx.drawImage(resultCanvas, originalCanvas.width + 30, 50);
+
     const link = document.createElement('a');
-    link.download = `translated_${currentFile ? currentFile.name.split('.')[0] : 'result'}.png`;
-    link.href = resultCanvas.toDataURL('image/png', 1.0);
+    link.download = `comparison_${currentFile ? currentFile.name.split('.')[0] : 'result'}.png`;
+    link.href = combinedCanvas.toDataURL('image/png', 1.0);
     link.click();
 });
 
