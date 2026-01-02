@@ -27,6 +27,7 @@ const downloadPdfBtn = document.getElementById('downloadPdf');
 const uploadHint = document.getElementById('uploadHint');
 const tabBtns = document.querySelectorAll('.tab-btn');
 const tabContents = document.querySelectorAll('.tab-content');
+const originalCanvas = document.getElementById('originalCanvas');
 const resultCanvas = document.getElementById('resultCanvas');
 const canvasLoader = document.getElementById('canvasLoader');
 const downloadVisualBtn = document.getElementById('downloadVisual');

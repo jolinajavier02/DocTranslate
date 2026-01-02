@@ -174,18 +174,30 @@
 
             <div id="visualTab" class="tab-content">
                 <div class="visual-container">
-                    <div class="canvas-wrapper">
-                        <canvas id="resultCanvas"></canvas>
-                        <div id="canvasLoader" class="canvas-loader hidden">
-                            <div class="spinner"></div>
-                            <p>Rendering translation...</p>
-                        </div>
-                    </div>
-                    <div class="visual-actions">
-                        <button class="btn-primary" id="downloadVisual">
+                    <div class="visual-header">
+                        <h3>Comparison View</h3>
+                        <button class="btn-primary btn-sm" id="downloadVisual">
                             <i data-lucide="download"></i>
-                            <span>Download Result</span>
+                            <span>Download Comparison</span>
                         </button>
+                    </div>
+                    <div class="comparison-grid">
+                        <div class="comparison-box">
+                            <span class="badge">Original</span>
+                            <div class="canvas-wrapper small">
+                                <canvas id="originalCanvas"></canvas>
+                            </div>
+                        </div>
+                        <div class="comparison-box">
+                            <span class="badge">Translated</span>
+                            <div class="canvas-wrapper small">
+                                <canvas id="resultCanvas"></canvas>
+                                <div id="canvasLoader" class="canvas-loader hidden">
+                                    <div class="spinner"></div>
+                                    <p>Rendering...</p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
