@@ -167,24 +167,49 @@
         </section>
 
         <section id="resultSection" class="result-section hidden">
-            <div class="result-grid">
-                <div class="result-box">
-                    <div class="box-header">
-                        <span>Original Text</span>
-                        <button class="btn-icon" title="Copy"><i data-lucide="copy"></i></button>
-                    </div>
-                    <div class="text-content" id="originalText" contenteditable="true"></div>
-                </div>
-                <div class="result-box">
-                    <div class="box-header">
-                        <span>Translated Text</span>
-                        <div class="box-actions">
-                            <button class="btn-icon" title="Copy"><i data-lucide="copy"></i></button>
-                            <button class="btn-icon" id="downloadPdf" title="Download PDF"><i
-                                    data-lucide="download"></i></button>
+            <div class="result-tabs">
+                <button class="tab-btn active" data-tab="visual">Visual Preview</button>
+                <button class="tab-btn" data-tab="text">Text Comparison</button>
+            </div>
+
+            <div id="visualTab" class="tab-content">
+                <div class="visual-container">
+                    <div class="canvas-wrapper">
+                        <canvas id="resultCanvas"></canvas>
+                        <div id="canvasLoader" class="canvas-loader hidden">
+                            <div class="spinner"></div>
+                            <p>Rendering translation...</p>
                         </div>
                     </div>
-                    <div class="text-content" id="translatedText" contenteditable="true"></div>
+                    <div class="visual-actions">
+                        <button class="btn-primary" id="downloadVisual">
+                            <i data-lucide="download"></i>
+                            <span>Download Result</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="textTab" class="tab-content hidden">
+                <div class="result-grid">
+                    <div class="result-box">
+                        <div class="box-header">
+                            <span>Original Text</span>
+                            <button class="btn-icon" title="Copy"><i data-lucide="copy"></i></button>
+                        </div>
+                        <div class="text-content" id="originalText" contenteditable="true"></div>
+                    </div>
+                    <div class="result-box">
+                        <div class="box-header">
+                            <span>Translated Text</span>
+                            <div class="box-actions">
+                                <button class="btn-icon" title="Copy"><i data-lucide="copy"></i></button>
+                                <button class="btn-icon" id="downloadPdf" title="Download PDF"><i
+                                        data-lucide="download"></i></button>
+                            </div>
+                        </div>
+                        <div class="text-content" id="translatedText" contenteditable="true"></div>
+                    </div>
                 </div>
             </div>
         </section>

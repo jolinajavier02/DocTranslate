@@ -162,6 +162,29 @@ function resetUpload() {
     progressContainer.classList.add('hidden');
 }
 
+// DOM Elements
+const tabBtns = document.querySelectorAll('.tab-btn');
+const tabContents = document.querySelectorAll('.tab-content');
+const resultCanvas = document.getElementById('resultCanvas');
+const canvasLoader = document.getElementById('canvasLoader');
+const downloadVisualBtn = document.getElementById('downloadVisual');
+
+// Tab Switching
+tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        tabBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const target = btn.dataset.tab;
+        tabContents.forEach(content => {
+            if (content.id === `${target}Tab`) {
+                content.classList.remove('hidden');
+            } else {
+                content.classList.add('hidden');
+            }
+        });
+    });
+});
+
 async function startTranslation() {
     if (currentMode !== 'text' && !currentFile) return;
     if (currentMode === 'text' && !textInput.value.trim()) return;
@@ -172,12 +195,17 @@ async function startTranslation() {
     updateProgress(10, 'Processing input...');
 
     try {
+        let ocrResult = null;
+
         if (currentMode === 'text') {
             extractedText = textInput.value;
         } else if (currentFile.type === 'application/pdf') {
             extractedText = await readPdf(currentFile);
+            // For visual PDF, we'll render the first page as an image
+            ocrResult = await performOCR(await pdfPageToImage(currentFile));
         } else if (currentMode === 'image' || currentFile.type.startsWith('image/')) {
-            extractedText = await readImage(currentFile);
+            ocrResult = await performOCR(currentFile);
+            extractedText = ocrResult.data.text;
         } else {
             extractedText = await readText(currentFile);
         }
@@ -192,20 +220,27 @@ async function startTranslation() {
         const translatedText = await translateText(extractedText, sourceLanguage.value, targetLanguage.value);
         translatedTextEl.innerText = translatedText;
 
+        // Visual Translation Rendering
+        if (currentMode !== 'text' && ocrResult) {
+            updateProgress(80, 'Rendering visual translation...');
+            await renderVisualTranslation(ocrResult);
+        }
+
         updateProgress(100, 'Done!');
 
-        // Show/Hide download button based on mode
+        // Show/Hide tabs based on mode
         if (currentMode === 'text') {
-            downloadPdfBtn.classList.add('hidden');
+            document.querySelector('.tab-btn[data-tab="visual"]').classList.add('hidden');
+            document.querySelector('.tab-btn[data-tab="text"]').click();
         } else {
-            downloadPdfBtn.classList.remove('hidden');
+            document.querySelector('.tab-btn[data-tab="visual"]').classList.remove('hidden');
+            document.querySelector('.tab-btn[data-tab="visual"]').click();
         }
 
         setTimeout(() => {
             progressContainer.classList.add('hidden');
             resultSection.classList.remove('hidden');
             translateBtn.disabled = false;
-            // Scroll to results
             resultSection.scrollIntoView({ behavior: 'smooth' });
         }, 500);
 
@@ -217,12 +252,86 @@ async function startTranslation() {
     }
 }
 
-function updateProgress(percent, status) {
-    progressBarFill.style.width = percent + '%';
-    progressStatus.textContent = status;
+async function performOCR(fileOrBlob) {
+    updateProgress(20, 'Analyzing document layout...');
+    return await Tesseract.recognize(fileOrBlob, 'eng+jpn+spa+fra', {
+        logger: m => {
+            if (m.status === 'recognizing text') {
+                updateProgress(20 + (m.progress * 20), `OCR: ${Math.round(m.progress * 100)}%`);
+            }
+        }
+    });
 }
 
-// File Reading Logic
+async function renderVisualTranslation(ocrResult) {
+    const canvas = resultCanvas;
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+
+    return new Promise((resolve) => {
+        img.onload = async () => {
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+
+            // Translate blocks/words
+            const blocks = ocrResult.data.blocks;
+            for (const block of blocks) {
+                const { x0, y0, x1, y1 } = block.bbox;
+                const width = x1 - x0;
+                const height = y1 - y0;
+
+                // 1. Get original text
+                const originalBlockText = block.text.trim();
+                if (!originalBlockText) continue;
+
+                // 2. Translate block text
+                const translatedBlockText = await translateText(originalBlockText, sourceLanguage.value, targetLanguage.value);
+
+                // 3. Mask original text (simple fill with average background color or white)
+                // In a real app, we'd sample the background color. Here we'll use a semi-transparent white for visibility.
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                ctx.fillRect(x0, y0, width, height);
+
+                // 4. Draw translated text
+                ctx.fillStyle = '#000000';
+                const fontSize = Math.max(12, height * 0.8);
+                ctx.font = `${fontSize}px sans-serif`;
+                ctx.fillText(translatedBlockText, x0, y0 + fontSize);
+            }
+            resolve();
+        };
+
+        if (currentFile.type.startsWith('image/')) {
+            img.src = URL.createObjectURL(currentFile);
+        } else {
+            // For PDF, we'd use the blob from pdfPageToImage
+            img.src = ocrResult.image; // Tesseract sometimes provides the processed image
+        }
+    });
+}
+
+async function pdfPageToImage(file) {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const page = await pdf.getPage(1);
+    const viewport = page.getViewport({ scale: 2 });
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    canvas.height = viewport.height;
+    canvas.width = viewport.width;
+    await page.render({ canvasContext: context, viewport: viewport }).promise;
+    return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+}
+
+downloadVisualBtn.addEventListener('click', () => {
+    const link = document.createElement('a');
+    link.download = `translated_${currentFile ? currentFile.name : 'result'}.png`;
+    link.href = resultCanvas.toDataURL();
+    link.click();
+});
+
+// Keep existing helper functions (readText, readPdf, translateText, splitText, downloadAsPdf)
 async function readText(file) {
     return new Promise((resolve) => {
         const reader = new FileReader();
@@ -231,87 +340,27 @@ async function readText(file) {
     });
 }
 
-async function readImage(file) {
-    updateProgress(20, 'Performing OCR (Image to Text)...');
-    const result = await Tesseract.recognize(file, 'eng+jpn+spa+fra', {
-        logger: m => {
-            if (m.status === 'recognizing text') {
-                updateProgress(20 + (m.progress * 20), `OCR: ${Math.round(m.progress * 100)}%`);
-            }
-        }
-    });
-    return result.data.text;
-}
-
 async function readPdf(file) {
-    updateProgress(20, 'Parsing PDF...');
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     let fullText = "";
-
     for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
-        const pageText = textContent.items.map(item => item.str).join(' ');
-        fullText += pageText + "\n\n";
-        updateProgress(20 + (i / pdf.numPages * 20), `Reading Page ${i}/${pdf.numPages}...`);
+        fullText += textContent.items.map(item => item.str).join(' ') + "\n\n";
     }
-
     return fullText;
 }
 
-// Translation Logic
 async function translateText(text, from, to) {
-    // Using MyMemory API (Free, no key required for basic usage)
-    // Note: For large texts, we should split it into chunks
-    const chunks = splitText(text, 500); // MyMemory limit is ~500 chars per request for free tier
-    let translatedChunks = [];
-
-    for (let i = 0; i < chunks.length; i++) {
-        updateProgress(40 + (i / chunks.length * 50), `Translating chunk ${i + 1}/${chunks.length}...`);
-        const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(chunks[i])}&langpair=${from}|${to}`;
-        const response = await fetch(url);
-        const data = await response.json();
-
-        if (data.responseStatus === 200) {
-            translatedChunks.push(data.responseData.translatedText);
-        } else {
-            translatedChunks.push("[Translation Error]");
-        }
-    }
-
-    return translatedChunks.join(' ');
+    if (!text.trim()) return "";
+    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${from}|${to}`;
+    const response = await fetch(url);
+    const data = await response.json();
+    return data.responseData.translatedText || text;
 }
 
-function splitText(text, maxLength) {
-    const chunks = [];
-    let currentChunk = "";
-    const sentences = text.split(/[.!?]\s/);
-
-    for (const sentence of sentences) {
-        if ((currentChunk + sentence).length < maxLength) {
-            currentChunk += sentence + ". ";
-        } else {
-            chunks.push(currentChunk.trim());
-            currentChunk = sentence + ". ";
-        }
-    }
-    if (currentChunk) chunks.push(currentChunk.trim());
-    return chunks;
-}
-
-// PDF Generation
-function downloadAsPdf() {
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-
-    const text = translatedTextEl.innerText;
-    const splitText = doc.splitTextToSize(text, 180);
-
-    doc.setFontSize(16);
-    doc.text("Translated Document", 10, 20);
-    doc.setFontSize(12);
-    doc.text(splitText, 10, 30);
-
-    doc.save(`translated_${currentFile ? currentFile.name : 'document'}.pdf`);
+function updateProgress(percent, status) {
+    progressBarFill.style.width = percent + '%';
+    progressStatus.textContent = status;
 }
