@@ -268,18 +268,53 @@ async function renderVisualTranslation(ocrResult, imageSource) {
     return new Promise((resolve, reject) => {
         img.onload = async () => {
             try {
-                // Set both canvases to the same dimensions
                 canvas.width = img.width;
                 canvas.height = img.height;
                 originalCanvas.width = img.width;
                 originalCanvas.height = img.height;
 
-                // Draw original on both initially
                 origCtx.drawImage(img, 0, 0);
                 ctx.drawImage(img, 0, 0);
 
-                const blocks = ocrResult.data.blocks;
+                // Show result section immediately so user sees the original image
+                resultSection.classList.remove('hidden');
+                resultSection.scrollIntoView({ behavior: 'smooth' });
+
+                const blocks = ocrResult.data.blocks.filter(b => b.text.trim().length > 1);
                 const totalBlocks = blocks.length;
+
+                if (totalBlocks === 0) {
+                    resolve();
+                    return;
+                }
+
+                // Batch translation for speed
+                // Join blocks with a unique delimiter that won't be translated
+                const delimiter = " ||| ";
+                const allTexts = blocks.map(b => b.text.trim());
+
+                // MyMemory limit is ~500-1000 chars. We'll chunk the blocks.
+                let currentChunk = [];
+                let currentLength = 0;
+                let translatedTexts = [];
+
+                for (const text of allTexts) {
+                    if (currentLength + text.length + delimiter.length > 500) {
+                        const batch = currentChunk.join(delimiter);
+                        const translatedBatch = await translateText(batch, sourceLanguage.value, targetLanguage.value);
+                        translatedTexts.push(...translatedBatch.split(delimiter));
+                        currentChunk = [text];
+                        currentLength = text.length;
+                    } else {
+                        currentChunk.push(text);
+                        currentLength += text.length + delimiter.length;
+                    }
+                }
+                if (currentChunk.length > 0) {
+                    const batch = currentChunk.join(delimiter);
+                    const translatedBatch = await translateText(batch, sourceLanguage.value, targetLanguage.value);
+                    translatedTexts.push(...translatedBatch.split(delimiter));
+                }
 
                 const sampleCanvas = document.createElement('canvas');
                 const sampleCtx = sampleCanvas.getContext('2d');
@@ -292,35 +327,28 @@ async function renderVisualTranslation(ocrResult, imageSource) {
                     const { x0, y0, x1, y1 } = block.bbox;
                     const width = x1 - x0;
                     const height = y1 - y0;
+                    const translatedText = translatedTexts[i] || blocks[i].text;
 
-                    const originalBlockText = block.text.trim();
-                    if (!originalBlockText || originalBlockText.length < 2) continue;
+                    // Sample background color (average of 4 corners)
+                    const p1 = sampleCtx.getImageData(Math.max(0, x0), Math.max(0, y0), 1, 1).data;
+                    const p2 = sampleCtx.getImageData(Math.min(img.width - 1, x1), Math.max(0, y0), 1, 1).data;
+                    const bgColor = `rgb(${Math.round((p1[0] + p2[0]) / 2)}, ${Math.round((p1[1] + p2[1]) / 2)}, ${Math.round((p1[2] + p2[2]) / 2)})`;
 
-                    updateProgress(80 + (i / totalBlocks * 15), `Rendering: ${Math.round(i / totalBlocks * 100)}%`);
+                    // Clean and Draw
+                    ctx.fillStyle = bgColor;
+                    ctx.fillRect(x0 - 1, y0 - 1, width + 2, height + 2);
 
-                    try {
-                        const translatedBlockText = await translateText(originalBlockText, sourceLanguage.value, targetLanguage.value);
+                    ctx.fillStyle = (p1[0] + p1[1] + p1[2]) / 3 > 128 ? '#000000' : '#ffffff';
+                    let fontSize = Math.max(8, height * 0.8);
+                    ctx.font = `${fontSize}px "Outfit", sans-serif`;
 
-                        const p1 = sampleCtx.getImageData(Math.max(0, x0), Math.max(0, y0), 1, 1).data;
-                        const bgColor = `rgb(${p1[0]}, ${p1[1]}, ${p1[2]})`;
-
-                        ctx.fillStyle = bgColor;
-                        ctx.fillRect(x0 - 1, y0 - 1, width + 2, height + 2);
-
-                        ctx.fillStyle = '#000000';
-                        let fontSize = Math.max(10, height * 0.8);
+                    while (ctx.measureText(translatedText).width > width && fontSize > 6) {
+                        fontSize -= 1;
                         ctx.font = `${fontSize}px "Outfit", sans-serif`;
-
-                        while (ctx.measureText(translatedBlockText).width > width && fontSize > 8) {
-                            fontSize -= 1;
-                            ctx.font = `${fontSize}px "Outfit", sans-serif`;
-                        }
-
-                        ctx.textBaseline = 'top';
-                        ctx.fillText(translatedBlockText, x0, y0 + (height - fontSize) / 2);
-                    } catch (err) {
-                        console.warn("Failed to render block:", err);
                     }
+
+                    ctx.textBaseline = 'top';
+                    ctx.fillText(translatedText, x0, y0 + (height - fontSize) / 2);
                 }
                 resolve();
             } catch (err) {
