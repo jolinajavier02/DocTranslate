@@ -25,6 +25,11 @@ const originalTextEl = document.getElementById('originalText');
 const translatedTextEl = document.getElementById('translatedText');
 const downloadPdfBtn = document.getElementById('downloadPdf');
 const uploadHint = document.getElementById('uploadHint');
+const tabBtns = document.querySelectorAll('.tab-btn');
+const tabContents = document.querySelectorAll('.tab-content');
+const resultCanvas = document.getElementById('resultCanvas');
+const canvasLoader = document.getElementById('canvasLoader');
+const downloadVisualBtn = document.getElementById('downloadVisual');
 
 let currentFile = null;
 let extractedText = "";
@@ -109,8 +114,23 @@ swapLanguages.addEventListener('click', () => {
 });
 
 translateBtn.addEventListener('click', startTranslation);
-
 downloadPdfBtn.addEventListener('click', downloadAsPdf);
+
+// Tab Switching
+tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        tabBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const target = btn.dataset.tab;
+        tabContents.forEach(content => {
+            if (content.id === `${target}Tab`) {
+                content.classList.remove('hidden');
+            } else {
+                content.classList.add('hidden');
+            }
+        });
+    });
+});
 
 // Copy functionality
 document.querySelectorAll('.btn-icon[title="Copy"]').forEach(btn => {
@@ -162,29 +182,6 @@ function resetUpload() {
     progressContainer.classList.add('hidden');
 }
 
-// DOM Elements
-const tabBtns = document.querySelectorAll('.tab-btn');
-const tabContents = document.querySelectorAll('.tab-content');
-const resultCanvas = document.getElementById('resultCanvas');
-const canvasLoader = document.getElementById('canvasLoader');
-const downloadVisualBtn = document.getElementById('downloadVisual');
-
-// Tab Switching
-tabBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-        tabBtns.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        const target = btn.dataset.tab;
-        tabContents.forEach(content => {
-            if (content.id === `${target}Tab`) {
-                content.classList.remove('hidden');
-            } else {
-                content.classList.add('hidden');
-            }
-        });
-    });
-});
-
 async function startTranslation() {
     if (currentMode !== 'text' && !currentFile) return;
     if (currentMode === 'text' && !textInput.value.trim()) return;
@@ -201,7 +198,6 @@ async function startTranslation() {
             extractedText = textInput.value;
         } else if (currentFile.type === 'application/pdf') {
             extractedText = await readPdf(currentFile);
-            // For visual PDF, we'll render the first page as an image
             ocrResult = await performOCR(await pdfPageToImage(currentFile));
         } else if (currentMode === 'image' || currentFile.type.startsWith('image/')) {
             ocrResult = await performOCR(currentFile);
@@ -220,7 +216,6 @@ async function startTranslation() {
         const translatedText = await translateText(extractedText, sourceLanguage.value, targetLanguage.value);
         translatedTextEl.innerText = translatedText;
 
-        // Visual Translation Rendering
         if (currentMode !== 'text' && ocrResult) {
             updateProgress(80, 'Rendering visual translation...');
             await renderVisualTranslation(ocrResult);
@@ -228,7 +223,6 @@ async function startTranslation() {
 
         updateProgress(100, 'Done!');
 
-        // Show/Hide tabs based on mode
         if (currentMode === 'text') {
             document.querySelector('.tab-btn[data-tab="visual"]').classList.add('hidden');
             document.querySelector('.tab-btn[data-tab="text"]').click();
@@ -277,7 +271,6 @@ async function renderVisualTranslation(ocrResult) {
             const blocks = ocrResult.data.blocks;
             const totalBlocks = blocks.length;
 
-            // Temporary canvas for sampling background
             const sampleCanvas = document.createElement('canvas');
             const sampleCtx = sampleCanvas.getContext('2d');
             sampleCanvas.width = img.width;
@@ -296,29 +289,21 @@ async function renderVisualTranslation(ocrResult) {
                 updateProgress(80 + (i / totalBlocks * 15), `Rendering: ${Math.round(i / totalBlocks * 100)}%`);
 
                 try {
-                    // 1. Sample background color (take average of corners)
                     const p1 = sampleCtx.getImageData(x0, y0, 1, 1).data;
                     const p2 = sampleCtx.getImageData(x1 - 1, y0, 1, 1).data;
                     const p3 = sampleCtx.getImageData(x0, y1 - 1, 1, 1).data;
                     const bgColor = `rgb(${Math.round((p1[0] + p2[0] + p3[0]) / 3)}, ${Math.round((p1[1] + p2[1] + p3[1]) / 3)}, ${Math.round((p1[2] + p2[2] + p3[2]) / 3)})`;
 
-                    // 2. Translate
                     const translatedBlockText = await translateText(originalBlockText, sourceLanguage.value, targetLanguage.value);
 
-                    // 3. Clean the area (Fill with sampled background color)
                     ctx.fillStyle = bgColor;
                     ctx.fillRect(x0 - 2, y0 - 2, width + 4, height + 4);
 
-                    // 4. Draw translated text
-                    ctx.fillStyle = '#000000'; // Default to black for documents
-
-                    // Calculate font size to fit the box
+                    ctx.fillStyle = '#000000';
                     let fontSize = Math.max(10, height * 0.7);
                     ctx.font = `${fontSize}px "Outfit", sans-serif`;
 
-                    // Simple text wrapping/fitting
-                    const words = translatedBlockText.split(' ');
-                    if (ctx.measureText(translatedBlockText).width > width && words.length > 1) {
+                    if (ctx.measureText(translatedBlockText).width > width) {
                         fontSize = Math.max(8, fontSize * 0.8);
                         ctx.font = `${fontSize}px "Outfit", sans-serif`;
                     }
@@ -336,11 +321,6 @@ async function renderVisualTranslation(ocrResult) {
             img.src = URL.createObjectURL(currentFile);
         } else if (ocrResult.image) {
             img.src = ocrResult.image;
-        } else {
-            // Fallback for PDF preview
-            const reader = new FileReader();
-            reader.onload = (e) => img.src = e.target.result;
-            // This part is tricky if we don't have the blob, but startTranslation handles it
         }
     });
 }
@@ -349,7 +329,7 @@ async function pdfPageToImage(file) {
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     const page = await pdf.getPage(1);
-    const viewport = page.getViewport({ scale: 2 }); // High res for better OCR
+    const viewport = page.getViewport({ scale: 2 });
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
     canvas.height = viewport.height;
@@ -365,7 +345,6 @@ downloadVisualBtn.addEventListener('click', () => {
     link.click();
 });
 
-// Keep existing helper functions (readText, readPdf, translateText, splitText, downloadAsPdf)
 async function readText(file) {
     return new Promise((resolve) => {
         const reader = new FileReader();
@@ -388,14 +367,49 @@ async function readPdf(file) {
 
 async function translateText(text, from, to) {
     if (!text.trim() || text.length < 2) return text;
-    try {
-        const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${from}|${to}`;
-        const response = await fetch(url);
-        const data = await response.json();
-        return data.responseData.translatedText || text;
-    } catch (e) {
-        return text;
+    const chunks = splitText(text, 500);
+    let translatedChunks = [];
+
+    for (const chunk of chunks) {
+        try {
+            const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(chunk)}&langpair=${from}|${to}`;
+            const response = await fetch(url);
+            const data = await response.json();
+            translatedChunks.push(data.responseData.translatedText || chunk);
+        } catch (e) {
+            translatedChunks.push(chunk);
+        }
     }
+    return translatedChunks.join(' ');
+}
+
+function splitText(text, maxLength) {
+    const chunks = [];
+    let currentChunk = "";
+    const sentences = text.split(/[.!?]\s/);
+
+    for (const sentence of sentences) {
+        if ((currentChunk + sentence).length < maxLength) {
+            currentChunk += sentence + ". ";
+        } else {
+            chunks.push(currentChunk.trim());
+            currentChunk = sentence + ". ";
+        }
+    }
+    if (currentChunk) chunks.push(currentChunk.trim());
+    return chunks;
+}
+
+function downloadAsPdf() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    const text = translatedTextEl.innerText;
+    const splitText = doc.splitTextToSize(text, 180);
+    doc.setFontSize(16);
+    doc.text("Translated Document", 10, 20);
+    doc.setFontSize(12);
+    doc.text(splitText, 10, 30);
+    doc.save(`translated_${currentFile ? currentFile.name.split('.')[0] : 'document'}.pdf`);
 }
 
 function updateProgress(percent, status) {
