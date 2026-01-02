@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DocTranslate | App</title>
+    <meta name="description"
+        content="Translate documents, images, and files instantly with AI-powered precision. Save directly to PDF.">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;700&display=swap"
+        rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="bg-glow"></div>
+
+    <nav>
+        <div class="nav-container">
+            <div class="logo">
+                <i data-lucide="languages"></i>
+                <span>DocTranslate</span>
+            </div>
+        </div>
+    </nav>
+
+    <main>
+        <section class="hero">
+            <h1 class="gradient-text">Translate Any Document <br><span>With AI Precision</span></h1>
+            <p class="subtitle">Upload your PDF, Image, or Text file and translate it into 100+ languages instantly.
+                Save your
+                results as a professional PDF.</p>
+        </section>
+
+        <section class="translator-card">
+            <div class="card-header">
+                <div class="language-controls">
+                    <div class="select-wrapper">
+                        <label>From</label>
+                        <select id="sourceLanguage">
+                            <option value="auto">Detect Language</option>
+                            <option value="en">English</option>
+                            <option value="es">Spanish</option>
+                            <option value="fr">French</option>
+                            <option value="de">German</option>
+                            <option value="ja">Japanese</option>
+                            <option value="zh">Chinese</option>
+                        </select>
+                    </div>
+                    <div class="swap-btn" id="swapLanguages">
+                        <i data-lucide="arrow-left-right"></i>
+                    </div>
+                    <div class="select-wrapper">
+                        <label>To</label>
+                        <select id="targetLanguage">
+                            <option value="en">English</option>
+                            <option value="es">Spanish</option>
+                            <option value="fr">French</option>
+                            <option value="de">German</option>
+                            <option value="ja" selected>Japanese</option>
+                            <option value="zh">Chinese</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="upload-zone" id="dropZone">
+                <input type="file" id="fileInput" hidden accept=".pdf,.jpg,.jpeg,.png,.txt">
+                <div class="upload-content">
+                    <div class="icon-circle">
+                        <i data-lucide="upload-cloud"></i>
+                    </div>
+                    <h3>Click or drag & drop</h3>
+                    <p>PDF, JPG, PNG, or TXT (Max 10MB)</p>
+                </div>
+                <div id="filePreview" class="file-preview hidden">
+                    <i data-lucide="file-text"></i>
+                    <span id="fileName">document.pdf</span>
+                    <button id="removeFile"><i data-lucide="x"></i></button>
+                </div>
+            </div>
+
+            <div class="action-bar">
+                <button id="translateBtn" class="btn-translate" disabled>
+                    <i data-lucide="wand-2"></i>
+                    <span>Translate Now</span>
+                </button>
+            </div>
+
+            <div id="progressContainer" class="progress-container hidden">
+                <div class="progress-bar">
+                    <div id="progressBarFill" class="progress-fill"></div>
+                </div>
+                <p id="progressStatus">Processing...</p>
+            </div>
+        </section>
+
+        <section id="resultSection" class="result-section hidden">
+            <div class="result-grid">
+                <div class="result-box">
+                    <div class="box-header">
+                        <span>Original Text</span>
+                        <button class="btn-icon" title="Copy"><i data-lucide="copy"></i></button>
+                    </div>
+                    <div class="text-content" id="originalText" contenteditable="true"></div>
+                </div>
+                <div class="result-box">
+                    <div class="box-header">
+                        <span>Translated Text</span>
+                        <div class="box-actions">
+                            <button class="btn-icon" title="Copy"><i data-lucide="copy"></i></button>
+                            <button class="btn-icon" id="downloadPdf" title="Download PDF"><i
+                                    data-lucide="download"></i></button>
+                        </div>
+                    </div>
+                    <div class="text-content" id="translatedText" contenteditable="true"></div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2024 DocTranslate. Powered by Advanced AI.</p>
+    </footer>
+
+    <script src="script.js"></script>
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+
+</html>
