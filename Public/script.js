@@ -219,7 +219,8 @@ async function startTranslation() {
 
         if (currentMode !== 'text' && ocrResult) {
             updateProgress(80, 'Rendering visual translation...');
-            await renderVisualTranslation(ocrResult);
+            const visualSource = currentFile.type === 'application/pdf' ? await pdfPageToImage(currentFile) : currentFile;
+            await renderVisualTranslation(ocrResult, visualSource);
         }
 
         updateProgress(100, 'Done!');
@@ -258,78 +259,77 @@ async function performOCR(fileOrBlob) {
     });
 }
 
-async function renderVisualTranslation(ocrResult) {
+async function renderVisualTranslation(ocrResult, imageSource) {
     const canvas = resultCanvas;
     const ctx = canvas.getContext('2d');
     const origCtx = originalCanvas.getContext('2d');
     const img = new Image();
 
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
         img.onload = async () => {
-            // Set both canvases to the same dimensions
-            canvas.width = img.width;
-            canvas.height = img.height;
-            originalCanvas.width = img.width;
-            originalCanvas.height = img.height;
+            try {
+                // Set both canvases to the same dimensions
+                canvas.width = img.width;
+                canvas.height = img.height;
+                originalCanvas.width = img.width;
+                originalCanvas.height = img.height;
 
-            // Draw original on both initially
-            origCtx.drawImage(img, 0, 0);
-            ctx.drawImage(img, 0, 0);
+                // Draw original on both initially
+                origCtx.drawImage(img, 0, 0);
+                ctx.drawImage(img, 0, 0);
 
-            const blocks = ocrResult.data.blocks;
-            const totalBlocks = blocks.length;
+                const blocks = ocrResult.data.blocks;
+                const totalBlocks = blocks.length;
 
-            const sampleCanvas = document.createElement('canvas');
-            const sampleCtx = sampleCanvas.getContext('2d');
-            sampleCanvas.width = img.width;
-            sampleCanvas.height = img.height;
-            sampleCtx.drawImage(img, 0, 0);
+                const sampleCanvas = document.createElement('canvas');
+                const sampleCtx = sampleCanvas.getContext('2d');
+                sampleCanvas.width = img.width;
+                sampleCanvas.height = img.height;
+                sampleCtx.drawImage(img, 0, 0);
 
-            for (let i = 0; i < blocks.length; i++) {
-                const block = blocks[i];
-                const { x0, y0, x1, y1 } = block.bbox;
-                const width = x1 - x0;
-                const height = y1 - y0;
+                for (let i = 0; i < blocks.length; i++) {
+                    const block = blocks[i];
+                    const { x0, y0, x1, y1 } = block.bbox;
+                    const width = x1 - x0;
+                    const height = y1 - y0;
 
-                const originalBlockText = block.text.trim();
-                if (!originalBlockText || originalBlockText.length < 2) continue;
+                    const originalBlockText = block.text.trim();
+                    if (!originalBlockText || originalBlockText.length < 2) continue;
 
-                updateProgress(80 + (i / totalBlocks * 15), `Rendering: ${Math.round(i / totalBlocks * 100)}%`);
+                    updateProgress(80 + (i / totalBlocks * 15), `Rendering: ${Math.round(i / totalBlocks * 100)}%`);
 
-                try {
-                    const p1 = sampleCtx.getImageData(x0, y0, 1, 1).data;
-                    const p2 = sampleCtx.getImageData(x1 - 1, y0, 1, 1).data;
-                    const p3 = sampleCtx.getImageData(x0, y1 - 1, 1, 1).data;
-                    const bgColor = `rgb(${Math.round((p1[0] + p2[0] + p3[0]) / 3)}, ${Math.round((p1[1] + p2[1] + p3[1]) / 3)}, ${Math.round((p1[2] + p2[2] + p3[2]) / 3)})`;
+                    try {
+                        const translatedBlockText = await translateText(originalBlockText, sourceLanguage.value, targetLanguage.value);
 
-                    const translatedBlockText = await translateText(originalBlockText, sourceLanguage.value, targetLanguage.value);
+                        const p1 = sampleCtx.getImageData(Math.max(0, x0), Math.max(0, y0), 1, 1).data;
+                        const bgColor = `rgb(${p1[0]}, ${p1[1]}, ${p1[2]})`;
 
-                    ctx.fillStyle = bgColor;
-                    ctx.fillRect(x0 - 2, y0 - 2, width + 4, height + 4);
+                        ctx.fillStyle = bgColor;
+                        ctx.fillRect(x0 - 1, y0 - 1, width + 2, height + 2);
 
-                    ctx.fillStyle = '#000000';
-                    let fontSize = Math.max(10, height * 0.7);
-                    ctx.font = `${fontSize}px "Outfit", sans-serif`;
-
-                    if (ctx.measureText(translatedBlockText).width > width) {
-                        fontSize = Math.max(8, fontSize * 0.8);
+                        ctx.fillStyle = '#000000';
+                        let fontSize = Math.max(10, height * 0.8);
                         ctx.font = `${fontSize}px "Outfit", sans-serif`;
+
+                        while (ctx.measureText(translatedBlockText).width > width && fontSize > 8) {
+                            fontSize -= 1;
+                            ctx.font = `${fontSize}px "Outfit", sans-serif`;
+                        }
+
+                        ctx.textBaseline = 'top';
+                        ctx.fillText(translatedBlockText, x0, y0 + (height - fontSize) / 2);
+                    } catch (err) {
+                        console.warn("Failed to render block:", err);
                     }
-
-                    ctx.textBaseline = 'top';
-                    ctx.fillText(translatedBlockText, x0, y0 + (height - fontSize) / 2);
-                } catch (err) {
-                    console.warn("Failed to render block:", err);
                 }
+                resolve();
+            } catch (err) {
+                console.error("Visual render error:", err);
+                reject(err);
             }
-            resolve();
         };
-
-        if (currentFile && currentFile.type.startsWith('image/')) {
-            img.src = URL.createObjectURL(currentFile);
-        } else if (ocrResult.image) {
-            img.src = ocrResult.image;
-        }
+        img.onerror = reject;
+        img.src = URL.createObjectURL(imageSource);
     });
 }
 
