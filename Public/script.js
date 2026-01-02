@@ -69,6 +69,24 @@ translateBtn.addEventListener('click', startTranslation);
 
 downloadPdfBtn.addEventListener('click', downloadAsPdf);
 
+// Copy functionality
+document.querySelectorAll('.btn-icon[title="Copy"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const targetId = btn.closest('.result-box').querySelector('.text-content').id;
+        const text = document.getElementById(targetId).innerText;
+        navigator.clipboard.writeText(text).then(() => {
+            const icon = btn.querySelector('i');
+            const originalIcon = icon.getAttribute('data-lucide');
+            icon.setAttribute('data-lucide', 'check');
+            lucide.createIcons();
+            setTimeout(() => {
+                icon.setAttribute('data-lucide', originalIcon);
+                lucide.createIcons();
+            }, 2000);
+        });
+    });
+});
+
 // Functions
 function handleFile(file) {
     const validTypes = ['application/pdf', 'image/jpeg', 'image/png', 'text/plain'];
