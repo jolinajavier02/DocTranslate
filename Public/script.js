@@ -5,6 +5,9 @@ lucide.createIcons();
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 // DOM Elements
+const modeBtns = document.querySelectorAll('.mode-btn');
+const textInputWrapper = document.getElementById('textInputWrapper');
+const textInput = document.getElementById('textInput');
 const dropZone = document.getElementById('dropZone');
 const fileInput = document.getElementById('fileInput');
 const filePreview = document.getElementById('filePreview');
@@ -21,9 +24,48 @@ const resultSection = document.getElementById('resultSection');
 const originalTextEl = document.getElementById('originalText');
 const translatedTextEl = document.getElementById('translatedText');
 const downloadPdfBtn = document.getElementById('downloadPdf');
+const uploadHint = document.getElementById('uploadHint');
 
 let currentFile = null;
 let extractedText = "";
+let currentMode = "text"; // Default mode
+
+// Mode Switching
+modeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        modeBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentMode = btn.dataset.mode;
+        updateUIForMode();
+    });
+});
+
+function updateUIForMode() {
+    resetUpload();
+    textInput.value = "";
+
+    if (currentMode === 'text') {
+        textInputWrapper.classList.remove('hidden');
+        dropZone.classList.add('hidden');
+        translateBtn.disabled = true;
+    } else {
+        textInputWrapper.classList.add('hidden');
+        dropZone.classList.remove('hidden');
+        translateBtn.disabled = true;
+
+        if (currentMode === 'image') {
+            uploadHint.textContent = "JPG, PNG, or WEBP (Max 10MB)";
+            fileInput.accept = ".jpg,.jpeg,.png,.webp";
+        } else {
+            uploadHint.textContent = "PDF or TXT (Max 10MB)";
+            fileInput.accept = ".pdf,.txt";
+        }
+    }
+}
+
+textInput.addEventListener('input', () => {
+    translateBtn.disabled = textInput.value.trim().length === 0;
+});
 
 // Event Listeners
 dropZone.addEventListener('click', () => fileInput.click());
@@ -89,9 +131,16 @@ document.querySelectorAll('.btn-icon[title="Copy"]').forEach(btn => {
 
 // Functions
 function handleFile(file) {
-    const validTypes = ['application/pdf', 'image/jpeg', 'image/png', 'text/plain'];
-    if (!validTypes.includes(file.type)) {
-        alert('Please upload a PDF, Image, or Text file.');
+    const isImage = file.type.startsWith('image/');
+    const isPdf = file.type === 'application/pdf';
+    const isTxt = file.type === 'text/plain';
+
+    if (currentMode === 'image' && !isImage) {
+        alert('Please upload an image file (JPG, PNG, etc.)');
+        return;
+    }
+    if (currentMode === 'files' && !isPdf && !isTxt) {
+        alert('Please upload a PDF or TXT file.');
         return;
     }
 
@@ -113,24 +162,27 @@ function resetUpload() {
 }
 
 async function startTranslation() {
-    if (!currentFile) return;
+    if (currentMode !== 'text' && !currentFile) return;
+    if (currentMode === 'text' && !textInput.value.trim()) return;
 
     translateBtn.disabled = true;
     progressContainer.classList.remove('hidden');
     resultSection.classList.add('hidden');
-    updateProgress(10, 'Reading file...');
+    updateProgress(10, 'Processing input...');
 
     try {
-        if (currentFile.type === 'application/pdf') {
+        if (currentMode === 'text') {
+            extractedText = textInput.value;
+        } else if (currentFile.type === 'application/pdf') {
             extractedText = await readPdf(currentFile);
-        } else if (currentFile.type.startsWith('image/')) {
+        } else if (currentMode === 'image' || currentFile.type.startsWith('image/')) {
             extractedText = await readImage(currentFile);
         } else {
             extractedText = await readText(currentFile);
         }
 
         if (!extractedText.trim()) {
-            throw new Error('No text could be extracted from this file.');
+            throw new Error('No text could be extracted or found.');
         }
 
         updateProgress(40, 'Translating...');
@@ -140,6 +192,14 @@ async function startTranslation() {
         translatedTextEl.innerText = translatedText;
 
         updateProgress(100, 'Done!');
+
+        // Show/Hide download button based on mode
+        if (currentMode === 'text') {
+            downloadPdfBtn.classList.add('hidden');
+        } else {
+            downloadPdfBtn.classList.remove('hidden');
+        }
+
         setTimeout(() => {
             progressContainer.classList.add('hidden');
             resultSection.classList.remove('hidden');

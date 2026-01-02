@@ -193,6 +193,68 @@ select:focus {
   background: rgba(255, 255, 255, 0.1);
 }
 
+.mode-selector {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.5rem;
+  border-radius: 16px;
+  border: 1px solid var(--glass-border);
+}
+
+.mode-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 0.8rem;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 12px;
+  font-weight: 600;
+  transition: all 0.3s;
+}
+
+.mode-btn i {
+  width: 20px;
+  height: 20px;
+}
+
+.mode-btn.active {
+  background: var(--primary);
+  color: white;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.mode-btn:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-main);
+}
+
+.text-input-wrapper textarea {
+  width: 100%;
+  min-height: 200px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  padding: 1.5rem;
+  color: var(--text-main);
+  font-size: 1.1rem;
+  resize: vertical;
+  outline: none;
+  transition: all 0.3s;
+  margin-bottom: 2rem;
+}
+
+.text-input-wrapper textarea:focus {
+  border-color: var(--primary);
+  background: rgba(255, 255, 255, 0.05);
+}
+
 .swap-btn {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--glass-border);
