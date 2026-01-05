@@ -54,11 +54,11 @@ function updateUIForMode() {
     if (currentMode === 'text') {
         textInputWrapper.classList.remove('hidden');
         dropZone.classList.add('hidden');
-        translateBtn.disabled = true;
+        checkTranslateButtonState();
     } else {
         textInputWrapper.classList.add('hidden');
         dropZone.classList.remove('hidden');
-        translateBtn.disabled = true;
+        checkTranslateButtonState();
 
         if (currentMode === 'image') {
             uploadHint.textContent = "JPG, PNG, or WEBP (Max 10MB)";
@@ -71,8 +71,24 @@ function updateUIForMode() {
 }
 
 textInput.addEventListener('input', () => {
-    translateBtn.disabled = textInput.value.trim().length === 0;
+    checkTranslateButtonState();
 });
+
+// Listen for target language changes
+targetLanguage.addEventListener('change', () => {
+    checkTranslateButtonState();
+});
+
+// Function to check if translate button should be enabled
+function checkTranslateButtonState() {
+    const hasTargetLanguage = targetLanguage.value !== '';
+
+    if (currentMode === 'text') {
+        translateBtn.disabled = !hasTargetLanguage || textInput.value.trim().length === 0;
+    } else {
+        translateBtn.disabled = !hasTargetLanguage || !currentFile;
+    }
+}
 
 // Event Listeners
 dropZone.addEventListener('click', () => fileInput.click());
@@ -170,7 +186,7 @@ function handleFile(file) {
     fileName.textContent = file.name;
     filePreview.classList.remove('hidden');
     dropZone.querySelector('.upload-content').classList.add('hidden');
-    translateBtn.disabled = false;
+    checkTranslateButtonState();
 }
 
 function resetUpload() {
@@ -178,7 +194,7 @@ function resetUpload() {
     fileInput.value = '';
     filePreview.classList.add('hidden');
     dropZone.querySelector('.upload-content').classList.remove('hidden');
-    translateBtn.disabled = true;
+    checkTranslateButtonState();
     resultSection.classList.add('hidden');
     progressContainer.classList.add('hidden');
 }
@@ -186,6 +202,10 @@ function resetUpload() {
 async function startTranslation() {
     if (currentMode !== 'text' && !currentFile) return;
     if (currentMode === 'text' && !textInput.value.trim()) return;
+    if (!targetLanguage.value) {
+        alert('Please select a target language first.');
+        return;
+    }
 
     translateBtn.disabled = true;
     progressContainer.classList.remove('hidden');
