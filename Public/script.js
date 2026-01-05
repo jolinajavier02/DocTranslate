@@ -288,25 +288,18 @@ async function renderVisualTranslation(ocrResult, imageSource) {
                     return;
                 }
 
-                // Batch translation for speed
-                const delimiter = " | "; // Simpler delimiter
+                // Parallel translation for "Google-like" speed
                 const allTexts = blocks.map(b => b.text.trim());
-                let translatedTexts = [];
+                updateProgress(60, 'Translating document content...');
 
-                // Process in smaller batches to avoid API limits and ensure delimiter integrity
-                for (let i = 0; i < allTexts.length; i += 5) {
-                    const batch = allTexts.slice(i, i + 5).join(delimiter);
-                    const translatedBatch = await translateText(batch, sourceLanguage.value, targetLanguage.value);
-                    const parts = translatedBatch.split(delimiter);
-
-                    // Ensure we have the same number of parts back, fallback to individual if mismatch
-                    if (parts.length === Math.min(5, allTexts.length - i)) {
-                        translatedTexts.push(...parts);
-                    } else {
-                        for (let j = i; j < Math.min(i + 5, allTexts.length); j++) {
-                            translatedTexts.push(await translateText(allTexts[j], sourceLanguage.value, targetLanguage.value));
-                        }
-                    }
+                // We'll translate in parallel but in small batches to respect API limits
+                const translatedTexts = [];
+                const batchSize = 3; // Small batches to avoid rate limiting
+                for (let i = 0; i < allTexts.length; i += batchSize) {
+                    const batch = allTexts.slice(i, i + batchSize);
+                    const results = await Promise.all(batch.map(text => translateText(text, sourceLanguage.value, targetLanguage.value)));
+                    translatedTexts.push(...results);
+                    updateProgress(60 + (i / allTexts.length * 20), `Translating: ${Math.round(i / allTexts.length * 100)}%`);
                 }
 
                 const sampleCanvas = document.createElement('canvas');
@@ -322,31 +315,42 @@ async function renderVisualTranslation(ocrResult, imageSource) {
                     const height = y1 - y0;
                     const translatedText = (translatedTexts[i] || blocks[i].text).trim();
 
-                    // Sample background color (average of 4 corners)
-                    const p1 = sampleCtx.getImageData(Math.max(0, x0), Math.max(0, y0), 1, 1).data;
-                    const p2 = sampleCtx.getImageData(Math.min(img.width - 1, x1 - 1), Math.max(0, y0), 1, 1).data;
-                    const bgColor = `rgb(${Math.round((p1[0] + p2[0]) / 2)}, ${Math.round((p1[1] + p2[1]) / 2)}, ${Math.round((p1[2] + p2[2]) / 2)})`;
+                    // 1. Google-style Inpainting: Sample background from a slightly larger area
+                    const sampleX = Math.max(0, x0 - 5);
+                    const sampleY = Math.max(0, y0 - 5);
+                    const p = sampleCtx.getImageData(sampleX, sampleY, 1, 1).data;
+                    const bgColor = `rgb(${p[0]}, ${p[1]}, ${p[2]})`;
 
-                    // Clean and Draw
+                    // 2. Clean the area with a slight feather/blur effect
                     ctx.fillStyle = bgColor;
-                    ctx.fillRect(x0 - 1, y0 - 1, width + 2, height + 2);
+                    ctx.shadowBlur = 5;
+                    ctx.shadowColor = bgColor;
+                    ctx.fillRect(x0 - 2, y0 - 2, width + 4, height + 4);
+                    ctx.shadowBlur = 0; // Reset shadow
 
-                    // Determine text color based on background brightness
-                    const brightness = (p1[0] * 299 + p1[1] * 587 + p1[2] * 114) / 1000;
-                    ctx.fillStyle = brightness > 128 ? '#000000' : '#ffffff';
+                    // 3. Determine text color with better contrast logic
+                    const brightness = (p[0] * 299 + p[1] * 587 + p[2] * 114) / 1000;
+                    ctx.fillStyle = brightness > 128 ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.95)';
 
-                    let fontSize = Math.max(8, height * 0.85);
-                    ctx.font = `${fontSize}px "Outfit", sans-serif`;
+                    // 4. Premium Typography
+                    let fontSize = Math.max(8, height * 0.8);
+                    ctx.font = `600 ${fontSize}px "Outfit", sans-serif`;
 
                     // Fit text to width
-                    while (ctx.measureText(translatedText).width > width && fontSize > 6) {
+                    while (ctx.measureText(translatedText).width > width && fontSize > 7) {
                         fontSize -= 0.5;
-                        ctx.font = `${fontSize}px "Outfit", sans-serif`;
+                        ctx.font = `600 ${fontSize}px "Outfit", sans-serif`;
                     }
 
                     ctx.textBaseline = 'middle';
-                    ctx.textAlign = 'left';
-                    ctx.fillText(translatedText, x0, y0 + height / 2);
+                    ctx.textAlign = 'center';
+
+                    // Add a very subtle text shadow for "on-paper" look
+                    ctx.shadowBlur = 1;
+                    ctx.shadowColor = brightness > 128 ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)';
+
+                    ctx.fillText(translatedText, x0 + width / 2, y0 + height / 2);
+                    ctx.shadowBlur = 0;
                 }
                 resolve();
             } catch (err) {
