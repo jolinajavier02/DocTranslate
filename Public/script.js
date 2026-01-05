@@ -214,7 +214,13 @@ async function startTranslation() {
         updateProgress(40, 'Translating...');
         originalTextEl.innerText = extractedText;
 
-        const translatedText = await translateText(extractedText, sourceLanguage.value, targetLanguage.value);
+        let translatedText;
+        if (currentMode === 'text') {
+            // Word-by-word translation for text mode
+            translatedText = await translateWordByWord(extractedText, sourceLanguage.value, targetLanguage.value);
+        } else {
+            translatedText = await translateText(extractedText, sourceLanguage.value, targetLanguage.value);
+        }
         translatedTextEl.innerText = translatedText;
 
         if (currentMode !== 'text' && ocrResult) {
@@ -424,21 +430,61 @@ async function readPdf(file) {
     return fullText;
 }
 
+async function translateWordByWord(text, from, to) {
+    if (!text.trim()) return text;
+
+    // Split text into words while preserving punctuation and spacing
+    const words = text.match(/\S+|\s+/g) || [];
+    const translatedWords = [];
+
+    // Translate in batches of 10 words for efficiency
+    const batchSize = 10;
+    for (let i = 0; i < words.length; i += batchSize) {
+        const batch = words.slice(i, i + batchSize);
+        const wordPromises = batch.map(async (word) => {
+            // Skip whitespace and punctuation-only strings
+            if (/^\s+$/.test(word) || /^[^\w]+$/.test(word)) {
+                return word;
+            }
+
+            try {
+                const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(word)}&langpair=${from}|${to}`;
+                const response = await fetch(url);
+                const data = await response.json();
+                return data.responseData.translatedText || word;
+            } catch (e) {
+                return word;
+            }
+        });
+
+        const translatedBatch = await Promise.all(wordPromises);
+        translatedWords.push(...translatedBatch);
+
+        // Update progress
+        const progress = 40 + (i / words.length * 40);
+        updateProgress(progress, `Translating: ${Math.round((i / words.length) * 100)}%`);
+    }
+
+    return translatedWords.join('');
+}
+
 async function translateText(text, from, to) {
     if (!text.trim() || text.length < 2) return text;
     const chunks = splitText(text, 500);
-    let translatedChunks = [];
 
-    for (const chunk of chunks) {
+    // Parallel translation for speed - translate all chunks at once
+    const translationPromises = chunks.map(async (chunk) => {
         try {
             const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(chunk)}&langpair=${from}|${to}`;
             const response = await fetch(url);
             const data = await response.json();
-            translatedChunks.push(data.responseData.translatedText || chunk);
+            return data.responseData.translatedText || chunk;
         } catch (e) {
-            translatedChunks.push(chunk);
+            return chunk;
         }
-    }
+    });
+
+    const translatedChunks = await Promise.all(translationPromises);
     return translatedChunks.join(' ');
 }
 
