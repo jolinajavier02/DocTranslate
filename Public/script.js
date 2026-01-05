@@ -29,7 +29,6 @@ const tabBtns = document.querySelectorAll('.tab-btn');
 const tabContents = document.querySelectorAll('.tab-content');
 const originalCanvas = document.getElementById('originalCanvas');
 const resultCanvas = document.getElementById('resultCanvas');
-const canvasLoader = document.getElementById('canvasLoader');
 const downloadVisualBtn = document.getElementById('downloadVisual');
 
 let currentFile = null;
@@ -244,7 +243,6 @@ async function startTranslation() {
         translatedTextEl.innerText = translatedText;
 
         if (currentMode !== 'text' && ocrResult) {
-            updateProgress(80, 'Rendering visual translation...');
             const visualSource = currentFile.type === 'application/pdf' ? await pdfPageToImage(currentFile) : currentFile;
             await renderVisualTranslation(ocrResult, visualSource);
         }
@@ -259,12 +257,10 @@ async function startTranslation() {
             document.querySelector('.tab-btn[data-tab="visual"]').click();
         }
 
-        setTimeout(() => {
-            progressContainer.classList.add('hidden');
-            resultSection.classList.remove('hidden');
-            translateBtn.disabled = false;
-            resultSection.scrollIntoView({ behavior: 'smooth' });
-        }, 500);
+        progressContainer.classList.add('hidden');
+        resultSection.classList.remove('hidden');
+        translateBtn.disabled = false;
+        resultSection.scrollIntoView({ behavior: 'smooth' });
 
     } catch (error) {
         console.error(error);
