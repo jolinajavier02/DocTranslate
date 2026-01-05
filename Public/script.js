@@ -236,10 +236,10 @@ async function startTranslation() {
 
         let translatedText;
         if (currentMode === 'text') {
-            // Word-by-word translation for text mode
-            translatedText = await translateWordByWord(extractedText, sourceLanguage.value, targetLanguage.value);
+            // Preserve paragraph structure for text mode
+            translatedText = await translateWithParagraphs(extractedText, sourceLanguage.value, targetLanguage.value);
         } else {
-            translatedText = await translateText(extractedText, sourceLanguage.value, targetLanguage.value);
+            translatedText = await translateWithParagraphs(extractedText, sourceLanguage.value, targetLanguage.value);
         }
         translatedTextEl.innerText = translatedText;
 
@@ -358,24 +358,66 @@ async function renderVisualTranslation(ocrResult, imageSource) {
                     const brightness = (p[0] * 299 + p[1] * 587 + p[2] * 114) / 1000;
                     ctx.fillStyle = brightness > 128 ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.95)';
 
-                    // 4. Premium Typography
+                    // 4. Premium Typography with multi-line support
                     let fontSize = Math.max(8, height * 0.8);
                     ctx.font = `600 ${fontSize}px "Outfit", sans-serif`;
 
-                    // Fit text to width
-                    while (ctx.measureText(translatedText).width > width && fontSize > 7) {
+                    // Wrap text if it's too long
+                    const words = translatedText.split(' ');
+                    let lines = [];
+                    let currentLine = '';
+
+                    for (const word of words) {
+                        const testLine = currentLine ? currentLine + ' ' + word : word;
+                        const metrics = ctx.measureText(testLine);
+
+                        if (metrics.width > width && currentLine) {
+                            lines.push(currentLine);
+                            currentLine = word;
+                        } else {
+                            currentLine = testLine;
+                        }
+                    }
+                    if (currentLine) lines.push(currentLine);
+
+                    // Adjust font size if too many lines
+                    while (lines.length * fontSize > height && fontSize > 7) {
                         fontSize -= 0.5;
                         ctx.font = `600 ${fontSize}px "Outfit", sans-serif`;
+
+                        // Recalculate lines with new font size
+                        lines = [];
+                        currentLine = '';
+                        for (const word of words) {
+                            const testLine = currentLine ? currentLine + ' ' + word : word;
+                            const metrics = ctx.measureText(testLine);
+
+                            if (metrics.width > width && currentLine) {
+                                lines.push(currentLine);
+                                currentLine = word;
+                            } else {
+                                currentLine = testLine;
+                            }
+                        }
+                        if (currentLine) lines.push(currentLine);
                     }
 
-                    ctx.textBaseline = 'middle';
+                    ctx.textBaseline = 'top';
                     ctx.textAlign = 'center';
 
                     // Add a very subtle text shadow for "on-paper" look
                     ctx.shadowBlur = 1;
                     ctx.shadowColor = brightness > 128 ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)';
 
-                    ctx.fillText(translatedText, x0 + width / 2, y0 + height / 2);
+                    // Draw each line
+                    const lineHeight = fontSize * 1.2;
+                    const totalHeight = lines.length * lineHeight;
+                    const startY = y0 + (height - totalHeight) / 2;
+
+                    lines.forEach((line, index) => {
+                        ctx.fillText(line, x0 + width / 2, startY + index * lineHeight);
+                    });
+
                     ctx.shadowBlur = 0;
                 }
                 resolve();
@@ -506,6 +548,34 @@ async function translateText(text, from, to) {
 
     const translatedChunks = await Promise.all(translationPromises);
     return translatedChunks.join(' ');
+}
+
+// New function to translate while preserving paragraph structure
+async function translateWithParagraphs(text, from, to) {
+    if (!text.trim()) return text;
+
+    // Split by double line breaks (paragraphs) or single line breaks
+    const paragraphs = text.split(/\n\n+/);
+    const translatedParagraphs = [];
+
+    for (let i = 0; i < paragraphs.length; i++) {
+        const paragraph = paragraphs[i].trim();
+        if (!paragraph) {
+            translatedParagraphs.push('');
+            continue;
+        }
+
+        // Translate the paragraph
+        const translatedParagraph = await translateText(paragraph, from, to);
+        translatedParagraphs.push(translatedParagraph);
+
+        // Update progress
+        const progress = 40 + (i / paragraphs.length * 40);
+        updateProgress(progress, `Translating: ${Math.round((i / paragraphs.length) * 100)}%`);
+    }
+
+    // Join paragraphs back with double line breaks
+    return translatedParagraphs.join('\n\n');
 }
 
 function splitText(text, maxLength) {
