@@ -341,29 +341,35 @@ async function renderVisualTranslation(ocrResult, imageSource) {
                     const height = y1 - y0;
                     const translatedText = (translatedTexts[i] || blocks[i].text).trim();
 
-                    // 1. Google-style Inpainting: Sample background from a slightly larger area
-                    const sampleX = Math.max(0, x0 - 5);
-                    const sampleY = Math.max(0, y0 - 5);
-                    const p = sampleCtx.getImageData(sampleX, sampleY, 1, 1).data;
-                    const bgColor = `rgb(${p[0]}, ${p[1]}, ${p[2]})`;
+                    if (!translatedText || width < 10 || height < 5) continue;
 
-                    // 2. Clean the area with a slight feather/blur effect
+                    // 1. Enhanced background sampling - multiple points for accuracy
+                    const samplePoints = [
+                        sampleCtx.getImageData(Math.max(0, x0), Math.max(0, y0), 1, 1).data,
+                        sampleCtx.getImageData(Math.min(img.width - 1, x1 - 1), Math.max(0, y0), 1, 1).data,
+                        sampleCtx.getImageData(Math.max(0, x0), Math.min(img.height - 1, y1 - 1), 1, 1).data,
+                        sampleCtx.getImageData(Math.min(img.width - 1, x1 - 1), Math.min(img.height - 1, y1 - 1), 1, 1).data
+                    ];
+
+                    const avgR = Math.round(samplePoints.reduce((sum, p) => sum + p[0], 0) / 4);
+                    const avgG = Math.round(samplePoints.reduce((sum, p) => sum + p[1], 0) / 4);
+                    const avgB = Math.round(samplePoints.reduce((sum, p) => sum + p[2], 0) / 4);
+                    const bgColor = `rgb(${avgR}, ${avgG}, ${avgB})`;
+
+                    // 2. Clean the area precisely
                     ctx.fillStyle = bgColor;
-                    ctx.shadowBlur = 5;
-                    ctx.shadowColor = bgColor;
-                    ctx.fillRect(x0 - 2, y0 - 2, width + 4, height + 4);
-                    ctx.shadowBlur = 0; // Reset shadow
+                    ctx.fillRect(x0, y0, width, height);
 
-                    // 3. Determine text color with better contrast logic
-                    const brightness = (p[0] * 299 + p[1] * 587 + p[2] * 114) / 1000;
-                    ctx.fillStyle = brightness > 128 ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.95)';
+                    // 3. Enhanced contrast detection
+                    const brightness = (avgR * 299 + avgG * 587 + avgB * 114) / 1000;
+                    ctx.fillStyle = brightness > 128 ? 'rgba(0,0,0,0.9)' : 'rgba(255,255,255,0.95)';
 
-                    // 4. Premium Typography with multi-line support
-                    let fontSize = Math.max(8, height * 0.8);
+                    // 4. Smart font sizing
+                    let fontSize = Math.max(7, Math.min(height * 0.75, 48));
                     ctx.font = `600 ${fontSize}px "Outfit", sans-serif`;
 
-                    // Wrap text if it's too long
-                    const words = translatedText.split(' ');
+                    // 5. Intelligent text wrapping
+                    const words = translatedText.split(/\s+/);
                     let lines = [];
                     let currentLine = '';
 
@@ -371,7 +377,7 @@ async function renderVisualTranslation(ocrResult, imageSource) {
                         const testLine = currentLine ? currentLine + ' ' + word : word;
                         const metrics = ctx.measureText(testLine);
 
-                        if (metrics.width > width && currentLine) {
+                        if (metrics.width > width - 4 && currentLine) {
                             lines.push(currentLine);
                             currentLine = word;
                         } else {
@@ -380,19 +386,21 @@ async function renderVisualTranslation(ocrResult, imageSource) {
                     }
                     if (currentLine) lines.push(currentLine);
 
-                    // Adjust font size if too many lines
-                    while (lines.length * fontSize > height && fontSize > 7) {
+                    // 6. Adjust font to fit height
+                    const lineHeight = fontSize * 1.15;
+                    let totalTextHeight = lines.length * lineHeight;
+
+                    while (totalTextHeight > height && fontSize > 7) {
                         fontSize -= 0.5;
                         ctx.font = `600 ${fontSize}px "Outfit", sans-serif`;
 
-                        // Recalculate lines with new font size
                         lines = [];
                         currentLine = '';
                         for (const word of words) {
                             const testLine = currentLine ? currentLine + ' ' + word : word;
                             const metrics = ctx.measureText(testLine);
 
-                            if (metrics.width > width && currentLine) {
+                            if (metrics.width > width - 4 && currentLine) {
                                 lines.push(currentLine);
                                 currentLine = word;
                             } else {
@@ -400,22 +408,39 @@ async function renderVisualTranslation(ocrResult, imageSource) {
                             }
                         }
                         if (currentLine) lines.push(currentLine);
+                        totalTextHeight = lines.length * fontSize * 1.15;
                     }
 
+                    // 7. Detect alignment from block position
+                    const blockCenterX = (x0 + x1) / 2;
+                    const imageCenterX = img.width / 2;
+                    const isLeftSide = blockCenterX < imageCenterX * 0.7;
+                    const isRightSide = blockCenterX > imageCenterX * 1.3;
+
+                    let textAlign = 'left';
+                    let textX = x0 + 2;
+
+                    if (isRightSide) {
+                        textAlign = 'right';
+                        textX = x1 - 2;
+                    } else if (!isLeftSide) {
+                        textAlign = 'center';
+                        textX = (x0 + x1) / 2;
+                    }
+
+                    ctx.textAlign = textAlign;
                     ctx.textBaseline = 'top';
-                    ctx.textAlign = 'center';
 
-                    // Add a very subtle text shadow for "on-paper" look
-                    ctx.shadowBlur = 1;
-                    ctx.shadowColor = brightness > 128 ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)';
+                    // 8. Subtle shadow for depth
+                    ctx.shadowBlur = 0.5;
+                    ctx.shadowColor = brightness > 128 ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)';
 
-                    // Draw each line
-                    const lineHeight = fontSize * 1.2;
-                    const totalHeight = lines.length * lineHeight;
-                    const startY = y0 + (height - totalHeight) / 2;
+                    // 9. Draw lines with proper spacing
+                    const finalLineHeight = fontSize * 1.15;
+                    const startY = y0 + Math.max(0, (height - totalTextHeight) / 2);
 
                     lines.forEach((line, index) => {
-                        ctx.fillText(line, x0 + width / 2, startY + index * lineHeight);
+                        ctx.fillText(line, textX, startY + index * finalLineHeight);
                     });
 
                     ctx.shadowBlur = 0;
