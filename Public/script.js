@@ -361,7 +361,7 @@ async function renderVisualTranslation(ocrResult, imageSource) {
                     ctx.fillStyle = brightness > 128 ? 'rgba(0,0,0,0.9)' : 'rgba(255,255,255,0.95)';
 
                     // 4. Smart font sizing
-                    let fontSize = Math.max(7, Math.min(height * 0.75, 48));
+                    let fontSize = Math.max(7, Math.min(height * 0.85, 48));
                     ctx.font = `600 ${fontSize}px "Outfit", sans-serif`;
 
                     // 5. Intelligent text wrapping
@@ -407,21 +407,23 @@ async function renderVisualTranslation(ocrResult, imageSource) {
                         totalTextHeight = lines.length * fontSize * 1.15;
                     }
 
-                    // 7. Detect alignment from block position
+                    // 7. Match original alignment and position
+                    let textAlign = 'left';
+                    let textX = x0;
+
+                    const blockWidthRatio = width / img.width;
                     const blockCenterX = (x0 + x1) / 2;
                     const imageCenterX = img.width / 2;
-                    const isLeftSide = blockCenterX < imageCenterX * 0.7;
-                    const isRightSide = blockCenterX > imageCenterX * 1.3;
+                    const isCenteredOnPage = Math.abs(blockCenterX - imageCenterX) < img.width * 0.1;
 
-                    let textAlign = 'left';
-                    let textX = x0 + 2;
-
-                    if (isRightSide) {
-                        textAlign = 'right';
-                        textX = x1 - 2;
-                    } else if (!isLeftSide) {
+                    if (isCenteredOnPage && (blockWidthRatio > 0.4 || lines[0].length < 20)) {
+                        // Likely a title or centered heading
                         textAlign = 'center';
-                        textX = (x0 + x1) / 2;
+                        textX = blockCenterX;
+                    } else if (x0 > img.width * 0.6 && width < img.width * 0.3) {
+                        // Likely right-aligned content (dates, signatures)
+                        textAlign = 'right';
+                        textX = x1;
                     }
 
                     ctx.textAlign = textAlign;
