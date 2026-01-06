@@ -381,59 +381,71 @@ async function renderVisualTranslation(ocrResult, imageSource) {
 
                     if (!translatedText || width < 5 || height < 5) continue;
 
-                    // 1. Enhanced background sampling
+                    // 1. Enhanced background sampling - 5 points for better average
                     const samplePoints = [
                         sampleCtx.getImageData(Math.max(0, x0), Math.max(0, y0), 1, 1).data,
                         sampleCtx.getImageData(Math.min(img.width - 1, x1 - 1), Math.max(0, y0), 1, 1).data,
                         sampleCtx.getImageData(Math.max(0, x0), Math.min(img.height - 1, y1 - 1), 1, 1).data,
-                        sampleCtx.getImageData(Math.min(img.width - 1, x1 - 1), Math.min(img.height - 1, y1 - 1), 1, 1).data
+                        sampleCtx.getImageData(Math.min(img.width - 1, x1 - 1), Math.min(img.height - 1, y1 - 1), 1, 1).data,
+                        sampleCtx.getImageData(Math.floor((x0 + x1) / 2), Math.floor((y0 + y1) / 2), 1, 1).data
                     ];
 
-                    const avgR = Math.round(samplePoints.reduce((sum, p) => sum + p[0], 0) / 4);
-                    const avgG = Math.round(samplePoints.reduce((sum, p) => sum + p[1], 0) / 4);
-                    const avgB = Math.round(samplePoints.reduce((sum, p) => sum + p[2], 0) / 4);
+                    const avgR = Math.round(samplePoints.reduce((sum, p) => sum + p[0], 0) / 5);
+                    const avgG = Math.round(samplePoints.reduce((sum, p) => sum + p[1], 0) / 5);
+                    const avgB = Math.round(samplePoints.reduce((sum, p) => sum + p[2], 0) / 5);
                     const bgColor = `rgb(${avgR}, ${avgG}, ${avgB})`;
 
-                    // 2. Clean the area with a slightly larger mask to ensure no "ghost" text
+                    // 2. Clean the area with a feathered mask for seamless blending
                     ctx.fillStyle = bgColor;
+                    ctx.shadowBlur = 2;
+                    ctx.shadowColor = bgColor;
                     ctx.fillRect(x0 - 1, y0 - 1, width + 2, height + 2);
+                    ctx.shadowBlur = 0; // Reset shadow
 
-                    // 3. Determine text color
+                    // 3. Determine text color with high contrast
                     const brightness = (avgR * 299 + avgG * 587 + avgB * 114) / 1000;
-                    ctx.fillStyle = brightness > 128 ? '#1a1a1a' : '#f0f0f0'; // Solid colors for "printed" look
+                    const textColor = brightness > 128 ? 'rgba(20, 20, 20, 0.95)' : 'rgba(245, 245, 245, 0.95)';
+                    ctx.fillStyle = textColor;
 
                     // 4. Font sizing based on line height
-                    let fontSize = Math.max(6, Math.min(height * 0.9, 60));
-                    ctx.font = `500 ${fontSize}px "Outfit", sans-serif`;
+                    let fontSize = Math.max(6, Math.min(height * 0.85, 60));
+                    ctx.font = `600 ${fontSize}px "Outfit", sans-serif`;
 
                     // 5. Adjust font size to fit width if necessary
-                    while (ctx.measureText(translatedText).width > width + 10 && fontSize > 6) {
+                    while (ctx.measureText(translatedText).width > width + 5 && fontSize > 6) {
                         fontSize -= 0.5;
-                        ctx.font = `500 ${fontSize}px "Outfit", sans-serif`;
+                        ctx.font = `600 ${fontSize}px "Outfit", sans-serif`;
                     }
 
-                    // 6. Alignment detection
+                    // 6. Alignment detection with padding
                     const lineCenterX = (x0 + x1) / 2;
                     const imageCenterX = img.width / 2;
                     const isCentered = Math.abs(lineCenterX - imageCenterX) < img.width * 0.05;
                     const isRight = x0 > img.width * 0.7;
 
                     let textAlign = 'left';
-                    let textX = x0;
+                    let textX = x0 + 1; // 1px padding
 
                     if (isRight) {
                         textAlign = 'right';
-                        textX = x1;
+                        textX = x1 - 1; // 1px padding
                     } else if (isCentered && width < img.width * 0.8) {
                         textAlign = 'center';
                         textX = lineCenterX;
                     }
 
                     ctx.textAlign = textAlign;
-                    ctx.textBaseline = 'middle';
+                    ctx.textBaseline = 'alphabetic';
 
-                    // 7. Draw the translated text
-                    ctx.fillText(translatedText, textX, y0 + height / 2);
+                    // 7. Subtle text shadow for "printed" depth
+                    ctx.shadowBlur = 0.5;
+                    ctx.shadowColor = brightness > 128 ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)';
+
+                    // 8. Draw the translated text with precise baseline (approx 82% down the box)
+                    const baselineY = y0 + (height * 0.82);
+                    ctx.fillText(translatedText, textX, baselineY);
+
+                    ctx.shadowBlur = 0; // Reset for next line
                 }
                 resolve();
             } catch (err) {
