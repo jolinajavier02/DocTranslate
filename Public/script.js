@@ -302,26 +302,35 @@ async function renderVisualTranslation(ocrResult, imageSource) {
                 resultSection.classList.remove('hidden');
                 resultSection.scrollIntoView({ behavior: 'smooth' });
 
-                const blocks = ocrResult.data.blocks.filter(b => b.text.trim().length > 1);
-                const totalBlocks = blocks.length;
+                // Extract all lines from all blocks for more granular control
+                const lines = [];
+                ocrResult.data.blocks.forEach(block => {
+                    block.paragraphs.forEach(para => {
+                        para.lines.forEach(line => {
+                            if (line.text.trim().length > 1) {
+                                lines.push(line);
+                            }
+                        });
+                    });
+                });
 
-                if (totalBlocks === 0) {
+                const totalLines = lines.length;
+                if (totalLines === 0) {
                     resolve();
                     return;
                 }
 
-                // Parallel translation for "Google-like" speed
-                const allTexts = blocks.map(b => b.text.trim());
-                updateProgress(60, 'Translating document content...');
+                // Parallel translation for lines
+                const allTexts = lines.map(l => l.text.trim());
+                updateProgress(60, 'Translating document lines...');
 
-                // We'll translate in parallel but in small batches to respect API limits
                 const translatedTexts = [];
-                const batchSize = 3; // Small batches to avoid rate limiting
+                const batchSize = 5;
                 for (let i = 0; i < allTexts.length; i += batchSize) {
                     const batch = allTexts.slice(i, i + batchSize);
                     const results = await Promise.all(batch.map(text => translateText(text, sourceLanguage.value, targetLanguage.value)));
                     translatedTexts.push(...results);
-                    updateProgress(60 + (i / allTexts.length * 20), `Translating: ${Math.round(i / allTexts.length * 100)}%`);
+                    updateProgress(60 + (i / allTexts.length * 30), `Translating: ${Math.round(i / allTexts.length * 100)}%`);
                 }
 
                 const sampleCanvas = document.createElement('canvas');
@@ -330,16 +339,16 @@ async function renderVisualTranslation(ocrResult, imageSource) {
                 sampleCanvas.height = img.height;
                 sampleCtx.drawImage(img, 0, 0);
 
-                for (let i = 0; i < blocks.length; i++) {
-                    const block = blocks[i];
-                    const { x0, y0, x1, y1 } = block.bbox;
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
+                    const { x0, y0, x1, y1 } = line.bbox;
                     const width = x1 - x0;
                     const height = y1 - y0;
-                    const translatedText = (translatedTexts[i] || blocks[i].text).trim();
+                    const translatedText = (translatedTexts[i] || line.text).trim();
 
-                    if (!translatedText || width < 10 || height < 5) continue;
+                    if (!translatedText || width < 5 || height < 5) continue;
 
-                    // 1. Enhanced background sampling - multiple points for accuracy
+                    // 1. Enhanced background sampling
                     const samplePoints = [
                         sampleCtx.getImageData(Math.max(0, x0), Math.max(0, y0), 1, 1).data,
                         sampleCtx.getImageData(Math.min(img.width - 1, x1 - 1), Math.max(0, y0), 1, 1).data,
@@ -352,96 +361,46 @@ async function renderVisualTranslation(ocrResult, imageSource) {
                     const avgB = Math.round(samplePoints.reduce((sum, p) => sum + p[2], 0) / 4);
                     const bgColor = `rgb(${avgR}, ${avgG}, ${avgB})`;
 
-                    // 2. Clean the area precisely
+                    // 2. Clean the area with a slightly larger mask to ensure no "ghost" text
                     ctx.fillStyle = bgColor;
-                    ctx.fillRect(x0, y0, width, height);
+                    ctx.fillRect(x0 - 1, y0 - 1, width + 2, height + 2);
 
-                    // 3. Enhanced contrast detection
+                    // 3. Determine text color
                     const brightness = (avgR * 299 + avgG * 587 + avgB * 114) / 1000;
-                    ctx.fillStyle = brightness > 128 ? 'rgba(0,0,0,0.9)' : 'rgba(255,255,255,0.95)';
+                    ctx.fillStyle = brightness > 128 ? '#1a1a1a' : '#f0f0f0'; // Solid colors for "printed" look
 
-                    // 4. Smart font sizing
-                    let fontSize = Math.max(7, Math.min(height * 0.85, 48));
-                    ctx.font = `600 ${fontSize}px "Outfit", sans-serif`;
+                    // 4. Font sizing based on line height
+                    let fontSize = Math.max(6, Math.min(height * 0.9, 60));
+                    ctx.font = `500 ${fontSize}px "Outfit", sans-serif`;
 
-                    // 5. Intelligent text wrapping
-                    const words = translatedText.split(/\s+/);
-                    let lines = [];
-                    let currentLine = '';
-
-                    for (const word of words) {
-                        const testLine = currentLine ? currentLine + ' ' + word : word;
-                        const metrics = ctx.measureText(testLine);
-
-                        if (metrics.width > width - 4 && currentLine) {
-                            lines.push(currentLine);
-                            currentLine = word;
-                        } else {
-                            currentLine = testLine;
-                        }
-                    }
-                    if (currentLine) lines.push(currentLine);
-
-                    // 6. Adjust font to fit height
-                    const lineHeight = fontSize * 1.15;
-                    let totalTextHeight = lines.length * lineHeight;
-
-                    while (totalTextHeight > height && fontSize > 7) {
+                    // 5. Adjust font size to fit width if necessary
+                    while (ctx.measureText(translatedText).width > width + 10 && fontSize > 6) {
                         fontSize -= 0.5;
-                        ctx.font = `600 ${fontSize}px "Outfit", sans-serif`;
-
-                        lines = [];
-                        currentLine = '';
-                        for (const word of words) {
-                            const testLine = currentLine ? currentLine + ' ' + word : word;
-                            const metrics = ctx.measureText(testLine);
-
-                            if (metrics.width > width - 4 && currentLine) {
-                                lines.push(currentLine);
-                                currentLine = word;
-                            } else {
-                                currentLine = testLine;
-                            }
-                        }
-                        if (currentLine) lines.push(currentLine);
-                        totalTextHeight = lines.length * fontSize * 1.15;
+                        ctx.font = `500 ${fontSize}px "Outfit", sans-serif`;
                     }
 
-                    // 7. Match original alignment and position
+                    // 6. Alignment detection
+                    const lineCenterX = (x0 + x1) / 2;
+                    const imageCenterX = img.width / 2;
+                    const isCentered = Math.abs(lineCenterX - imageCenterX) < img.width * 0.05;
+                    const isRight = x0 > img.width * 0.7;
+
                     let textAlign = 'left';
                     let textX = x0;
 
-                    const blockWidthRatio = width / img.width;
-                    const blockCenterX = (x0 + x1) / 2;
-                    const imageCenterX = img.width / 2;
-                    const isCenteredOnPage = Math.abs(blockCenterX - imageCenterX) < img.width * 0.1;
-
-                    if (isCenteredOnPage && (blockWidthRatio > 0.4 || lines[0].length < 20)) {
-                        // Likely a title or centered heading
-                        textAlign = 'center';
-                        textX = blockCenterX;
-                    } else if (x0 > img.width * 0.6 && width < img.width * 0.3) {
-                        // Likely right-aligned content (dates, signatures)
+                    if (isRight) {
                         textAlign = 'right';
                         textX = x1;
+                    } else if (isCentered && width < img.width * 0.8) {
+                        textAlign = 'center';
+                        textX = lineCenterX;
                     }
 
                     ctx.textAlign = textAlign;
-                    ctx.textBaseline = 'top';
+                    ctx.textBaseline = 'middle';
 
-                    // 8. Subtle shadow for depth
-                    ctx.shadowBlur = 0.5;
-                    ctx.shadowColor = brightness > 128 ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)';
-
-                    // 9. Draw lines with proper spacing
-                    const finalLineHeight = fontSize * 1.15;
-                    const startY = y0 + Math.max(0, (height - totalTextHeight) / 2);
-
-                    lines.forEach((line, index) => {
-                        ctx.fillText(line, textX, startY + index * finalLineHeight);
-                    });
-
-                    ctx.shadowBlur = 0;
+                    // 7. Draw the translated text
+                    ctx.fillText(translatedText, textX, y0 + height / 2);
                 }
                 resolve();
             } catch (err) {
