@@ -322,11 +322,11 @@ async function renderVisualTranslation(ocrResult, imageSource) {
 
                 // Batch lines to reduce API calls and avoid rate limiting
                 const translatedTexts = new Array(lines.length);
-                const separator = " ||| ";
+                const separator = " [SEP] ";
                 let currentBatch = [];
                 let currentBatchIndices = [];
                 let currentBatchLength = 0;
-                const maxBatchLength = 400;
+                const maxBatchLength = 450;
 
                 const fromLang = sourceLanguage.value === 'auto' ? 'autodetect' : sourceLanguage.value;
                 const toLang = targetLanguage.value;
@@ -336,12 +336,10 @@ async function renderVisualTranslation(ocrResult, imageSource) {
                     if (currentBatchLength + text.length + separator.length > maxBatchLength && currentBatch.length > 0) {
                         const batchText = currentBatch.join(separator);
                         const translatedBatch = await translateText(batchText, fromLang, toLang);
-                        const parts = translatedBatch.split("|||");
+                        const parts = translatedBatch.split(/\[SEP\]|\|\|\|/i);
 
-                        parts.forEach((part, idx) => {
-                            if (currentBatchIndices[idx] !== undefined) {
-                                translatedTexts[currentBatchIndices[idx]] = part.trim();
-                            }
+                        currentBatchIndices.forEach((originalIdx, batchIdx) => {
+                            translatedTexts[originalIdx] = (parts[batchIdx] || currentBatch[batchIdx]).trim();
                         });
 
                         currentBatch = [];
@@ -358,11 +356,9 @@ async function renderVisualTranslation(ocrResult, imageSource) {
                 if (currentBatch.length > 0) {
                     const batchText = currentBatch.join(separator);
                     const translatedBatch = await translateText(batchText, fromLang, toLang);
-                    const parts = translatedBatch.split("|||");
-                    parts.forEach((part, idx) => {
-                        if (currentBatchIndices[idx] !== undefined) {
-                            translatedTexts[currentBatchIndices[idx]] = part.trim();
-                        }
+                    const parts = translatedBatch.split(/\[SEP\]|\|\|\|/i);
+                    currentBatchIndices.forEach((originalIdx, batchIdx) => {
+                        translatedTexts[originalIdx] = (parts[batchIdx] || currentBatch[batchIdx]).trim();
                     });
                 }
 
@@ -407,29 +403,41 @@ async function renderVisualTranslation(ocrResult, imageSource) {
                     const textColor = brightness > 128 ? 'rgba(20, 20, 20, 0.95)' : 'rgba(245, 245, 245, 0.95)';
                     ctx.fillStyle = textColor;
 
-                    // 4. Font sizing based on line height
-                    let fontSize = Math.max(6, Math.min(height * 0.85, 60));
+                    // 4. Consistent Font Sizing - use a more stable calculation
+                    // Calculate a 'base' font size from the height but cap it more strictly
+                    let fontSize = Math.max(7, Math.min(height * 0.82, 54));
+
+                    // Normalize font size for similar lines (heuristic)
+                    if (i > 0) {
+                        const prevLine = lines[i - 1];
+                        const prevHeight = prevLine.bbox.y1 - prevLine.bbox.y0;
+                        if (Math.abs(height - prevHeight) < 5) {
+                            // Keep font size consistent for lines of similar height
+                            fontSize = Math.max(7, Math.min(prevHeight * 0.82, 54));
+                        }
+                    }
+
                     ctx.font = `600 ${fontSize}px "Outfit", sans-serif`;
 
                     // 5. Adjust font size to fit width if necessary
-                    while (ctx.measureText(translatedText).width > width + 5 && fontSize > 6) {
+                    while (ctx.measureText(translatedText).width > width + 8 && fontSize > 7) {
                         fontSize -= 0.5;
                         ctx.font = `600 ${fontSize}px "Outfit", sans-serif`;
                     }
 
-                    // 6. Alignment detection with padding
+                    // 6. Alignment detection with improved heuristics
                     const lineCenterX = (x0 + x1) / 2;
                     const imageCenterX = img.width / 2;
-                    const isCentered = Math.abs(lineCenterX - imageCenterX) < img.width * 0.05;
-                    const isRight = x0 > img.width * 0.7;
+                    const isCentered = Math.abs(lineCenterX - imageCenterX) < img.width * 0.08;
+                    const isRight = x0 > img.width * 0.65 && width < img.width * 0.4;
 
                     let textAlign = 'left';
-                    let textX = x0 + 1; // 1px padding
+                    let textX = x0;
 
                     if (isRight) {
                         textAlign = 'right';
-                        textX = x1 - 1; // 1px padding
-                    } else if (isCentered && width < img.width * 0.8) {
+                        textX = x1;
+                    } else if (isCentered && width < img.width * 0.75) {
                         textAlign = 'center';
                         textX = lineCenterX;
                     }
@@ -438,11 +446,12 @@ async function renderVisualTranslation(ocrResult, imageSource) {
                     ctx.textBaseline = 'alphabetic';
 
                     // 7. Subtle text shadow for "printed" depth
-                    ctx.shadowBlur = 0.5;
-                    ctx.shadowColor = brightness > 128 ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)';
+                    ctx.shadowBlur = 0.3;
+                    ctx.shadowColor = brightness > 128 ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
 
-                    // 8. Draw the translated text with precise baseline (approx 82% down the box)
-                    const baselineY = y0 + (height * 0.82);
+                    // 8. Draw the translated text with precise baseline
+                    // Most fonts have a baseline at about 75-80% of the em-box
+                    const baselineY = y0 + (height * 0.8);
                     ctx.fillText(translatedText, textX, baselineY);
 
                     ctx.shadowBlur = 0; // Reset for next line
