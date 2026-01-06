@@ -320,17 +320,50 @@ async function renderVisualTranslation(ocrResult, imageSource) {
                     return;
                 }
 
-                // Parallel translation for lines
-                const allTexts = lines.map(l => l.text.trim());
-                updateProgress(60, 'Translating document lines...');
+                // Batch lines to reduce API calls and avoid rate limiting
+                const translatedTexts = new Array(lines.length);
+                const separator = " ||| ";
+                let currentBatch = [];
+                let currentBatchIndices = [];
+                let currentBatchLength = 0;
+                const maxBatchLength = 400;
 
-                const translatedTexts = [];
-                const batchSize = 5;
-                for (let i = 0; i < allTexts.length; i += batchSize) {
-                    const batch = allTexts.slice(i, i + batchSize);
-                    const results = await Promise.all(batch.map(text => translateText(text, sourceLanguage.value, targetLanguage.value)));
-                    translatedTexts.push(...results);
-                    updateProgress(60 + (i / allTexts.length * 30), `Translating: ${Math.round(i / allTexts.length * 100)}%`);
+                const fromLang = sourceLanguage.value === 'auto' ? 'autodetect' : sourceLanguage.value;
+                const toLang = targetLanguage.value;
+
+                for (let i = 0; i < lines.length; i++) {
+                    const text = lines[i].text.trim();
+                    if (currentBatchLength + text.length + separator.length > maxBatchLength && currentBatch.length > 0) {
+                        const batchText = currentBatch.join(separator);
+                        const translatedBatch = await translateText(batchText, fromLang, toLang);
+                        const parts = translatedBatch.split("|||");
+
+                        parts.forEach((part, idx) => {
+                            if (currentBatchIndices[idx] !== undefined) {
+                                translatedTexts[currentBatchIndices[idx]] = part.trim();
+                            }
+                        });
+
+                        currentBatch = [];
+                        currentBatchIndices = [];
+                        currentBatchLength = 0;
+                    }
+
+                    currentBatch.push(text);
+                    currentBatchIndices.push(i);
+                    currentBatchLength += text.length + separator.length;
+                    updateProgress(60 + (i / lines.length * 20), `Translating: ${Math.round(i / lines.length * 100)}%`);
+                }
+
+                if (currentBatch.length > 0) {
+                    const batchText = currentBatch.join(separator);
+                    const translatedBatch = await translateText(batchText, fromLang, toLang);
+                    const parts = translatedBatch.split("|||");
+                    parts.forEach((part, idx) => {
+                        if (currentBatchIndices[idx] !== undefined) {
+                            translatedTexts[currentBatchIndices[idx]] = part.trim();
+                        }
+                    });
                 }
 
                 const sampleCanvas = document.createElement('canvas');
@@ -498,11 +531,19 @@ async function translateText(text, from, to) {
     // Parallel translation for speed - translate all chunks at once
     const translationPromises = chunks.map(async (chunk) => {
         try {
-            const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(chunk)}&langpair=${from}|${to}`;
+            const fromLang = from === 'auto' ? 'autodetect' : from;
+            const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(chunk)}&langpair=${fromLang}|${to}`;
             const response = await fetch(url);
             const data = await response.json();
-            return data.responseData.translatedText || chunk;
+
+            if (data.responseStatus === 200) {
+                return data.responseData.translatedText || chunk;
+            } else {
+                console.warn('Translation API error:', data.responseDetails);
+                return chunk;
+            }
         } catch (e) {
+            console.error('Translation fetch error:', e);
             return chunk;
         }
     });
