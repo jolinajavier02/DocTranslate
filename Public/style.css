@@ -349,7 +349,7 @@ select:focus {
 }
 
 .btn-translate {
-  background: linear-gradient(135deg, var(--primary), #10b981);
+  background: var(--primary);
   color: white;
   border: none;
   padding: 1rem 2.5rem;
