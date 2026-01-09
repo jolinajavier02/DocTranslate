@@ -62,11 +62,12 @@ nav {
   font-family: 'Outfit', sans-serif;
   font-size: 1.5rem;
   font-weight: 700;
-  color: var(--text-main);
+  color: #09713D;
+  font-weight: bold;
 }
 
 .logo i {
-  color: var(--primary);
+  color: #09713D;
 }
 
 .nav-links {
