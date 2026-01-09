@@ -30,10 +30,29 @@ const tabContents = document.querySelectorAll('.tab-content');
 const originalCanvas = document.getElementById('originalCanvas');
 const resultCanvas = document.getElementById('resultCanvas');
 const downloadVisualBtn = document.getElementById('downloadVisual');
+const landingView = document.getElementById('landingView');
+const appView = document.getElementById('appView');
+const startTranslateBtn = document.getElementById('startTranslateBtn');
+const logoLink = document.getElementById('logoLink');
 
 let currentFile = null;
 let extractedText = "";
 let currentMode = "text"; // Default mode
+
+// View Switching Logic
+startTranslateBtn.addEventListener('click', () => {
+    landingView.classList.add('hidden');
+    appView.classList.remove('hidden');
+    window.scrollTo(0, 0);
+    lucide.createIcons();
+});
+
+logoLink.addEventListener('click', () => {
+    appView.classList.add('hidden');
+    landingView.classList.remove('hidden');
+    window.scrollTo(0, 0);
+    lucide.createIcons();
+});
 
 // Mode Switching
 modeBtns.forEach(btn => {
