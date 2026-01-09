@@ -1,0 +1,10 @@
+{
+    "server": {
+        "baseDir": "./Public",
+        "serveStaticOptions": {
+            "extensions": [
+                "html"
+            ]
+        }
+    }
+}
